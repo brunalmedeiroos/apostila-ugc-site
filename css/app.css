@@ -1,0 +1,195 @@
+/* Identidade do portfólio brunamedeiros.com: mesmas cores, fontes e raios. */
+@font-face {
+  font-family: 'Open Sauce Sans';
+  src: url('../fonts/open-sauce-sans-900.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --blue-light: #9cbbd8;
+  --blue-dark: #5c6e91;
+  --ink: #3b4a6b;
+  --butter: #f5e1b4;
+  --offwhite: #f1f1f1;
+  --white: #ffffff;
+  --linha: rgba(92, 110, 145, 0.16);
+  --shadow-soft: 0 20px 45px rgba(92, 110, 145, 0.16);
+  --shadow-hard: 0 10px 24px rgba(92, 110, 145, 0.22);
+  --erro: #a3392f;
+
+  --font-display: 'Open Sauce Sans', 'Montserrat', sans-serif;
+  --font-body: 'Montserrat', sans-serif;
+  --font-script: 'Pinyon Script', cursive;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--offwhite);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  outline: none;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  color: var(--blue-dark);
+}
+h1 { font-size: clamp(1.9rem, 8vw, 2.6rem); }
+h2 { font-size: 1.35rem; }
+
+a { color: var(--blue-dark); }
+ul { list-style: none; }
+
+.pular {
+  position: absolute; left: -999px; top: 8px;
+  background: var(--blue-dark); color: var(--offwhite);
+  padding: 10px 14px; border-radius: 10px; z-index: 10;
+}
+.pular:focus { left: 8px; }
+
+:focus-visible { outline: 3px solid var(--blue-dark); outline-offset: 3px; border-radius: 6px; }
+
+.carregando { text-align: center; padding: 80px 0; color: var(--blue-dark); font-weight: 600; }
+
+/* ---------- Card ---------- */
+.card {
+  background: var(--white);
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+  padding: 24px 20px;
+}
+.card + .card { margin-top: 16px; }
+
+/* ---------- Botões ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px;
+  font-family: var(--font-body); font-weight: 700; font-size: 0.95rem;
+  padding: 12px 24px; border-radius: 14px; border: 2px solid var(--blue-dark);
+  background: transparent; color: var(--blue-dark);
+  cursor: pointer; text-decoration: none; text-align: center;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease, color 0.25s ease;
+}
+.btn:hover { background: var(--blue-dark); color: var(--offwhite); transform: translateY(-2px); }
+.btn-primario { background: var(--blue-dark); color: var(--offwhite); box-shadow: var(--shadow-hard); }
+.btn-primario:hover { box-shadow: 0 16px 30px rgba(92, 110, 145, 0.3); }
+.btn[disabled], .btn[aria-disabled='true'] {
+  opacity: 0.5; cursor: not-allowed; transform: none; background: transparent; color: var(--blue-dark); box-shadow: none;
+}
+.btn-bloco { width: 100%; }
+.btn-texto {
+  background: none; border: none; min-height: 44px; padding: 8px 4px;
+  font: inherit; font-weight: 600; font-size: 0.9rem; color: var(--blue-dark); cursor: pointer; text-decoration: underline;
+}
+
+/* ---------- Login ---------- */
+.login { padding-top: 12vh; text-align: center; }
+.marca { font-family: var(--font-script); font-size: 2rem; color: var(--blue-dark); margin-bottom: 12px; }
+.login h1 { margin-bottom: 16px; }
+.login .card { text-align: left; margin-top: 28px; }
+.login .card p { margin-bottom: 20px; }
+.privacidade { font-size: 0.82rem; line-height: 1.5; color: var(--blue-dark); margin: 16px 0 0 !important; }
+
+/* ---------- Topo / progresso ---------- */
+.topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.topo .marca { font-size: 1.6rem; margin: 0; }
+
+.resumo { display: flex; align-items: center; gap: 20px; }
+.anel { flex: none; width: 96px; height: 96px; }
+.anel circle { fill: none; stroke-width: 9; }
+.anel .trilho { stroke: var(--offwhite); }
+.anel .barra { stroke: var(--blue-dark); stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.anel text { font-family: var(--font-display); font-weight: 900; font-size: 22px; fill: var(--blue-dark); text-anchor: middle; dominant-baseline: central; }
+.resumo h1 { font-size: 1.5rem; margin-bottom: 4px; }
+.resumo p { font-size: 0.9rem; }
+
+/* ---------- Lista de dias ---------- */
+.lista-dias { margin-top: 16px; padding: 8px 8px; }
+.dia-item {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  min-height: 60px; padding: 10px 12px;
+  background: none; border: none; border-radius: 14px; text-align: left;
+  font: inherit; color: inherit; cursor: pointer; text-decoration: none;
+}
+.dia-item:hover:not([aria-disabled='true']) { background: var(--offwhite); }
+.dia-item + .dia-item { border-top: 1px solid var(--linha); border-radius: 0 0 14px 14px; }
+.dia-item[aria-disabled='true'] { cursor: default; color: var(--blue-dark); }
+.dia-icone { flex: none; width: 28px; display: flex; justify-content: center; color: var(--blue-dark); font-family: var(--font-display); font-weight: 900; }
+.dia-icone svg { width: 22px; height: 22px; }
+.dia-texto { flex: 1; min-width: 0; }
+.dia-num { display: block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--blue-dark); }
+.dia-titulo { display: block; font-weight: 600; line-height: 1.3; }
+.dia-lado { flex: none; font-size: 0.78rem; font-weight: 600; color: var(--blue-dark); text-align: right; }
+.dia-item.concluido .dia-titulo { color: var(--blue-dark); }
+
+/* ---------- Página do dia ---------- */
+.voltar { margin-bottom: 8px; }
+.cabeca-dia { margin: 4px 0 20px; }
+.cabeca-dia .dia-num { margin-bottom: 6px; }
+
+.secao h2 { margin-bottom: 12px; }
+.secao .rotulo { display: block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--blue-dark); margin-bottom: 6px; }
+.secao p + p { margin-top: 12px; }
+.secao .btn { margin-top: 16px; }
+
+.links-estudo li { padding: 12px 0; border-top: 1px solid var(--linha); }
+.links-estudo li:first-child { border-top: none; padding-top: 0; }
+.links-estudo a, .links-estudo .sem-link { font-weight: 600; }
+.links-estudo .sem-link { color: var(--blue-dark); }
+.tempo { font-size: 0.88rem; color: var(--blue-dark); margin-bottom: 14px; font-weight: 600; }
+
+.pontos { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--linha); font-size: 0.92rem; }
+.pontos strong { color: var(--blue-dark); }
+.prazo { margin-top: 10px; font-weight: 600; color: var(--blue-dark); }
+
+.checklist li { border-top: 1px solid var(--linha); }
+.checklist li:first-child { border-top: none; }
+.check { display: flex; align-items: flex-start; gap: 14px; min-height: 52px; padding: 12px 0; cursor: pointer; }
+.check input { flex: none; width: 24px; height: 24px; margin-top: 1px; accent-color: var(--blue-dark); cursor: pointer; }
+.check span { flex: 1; }
+.opcional { font-size: 0.78rem; font-weight: 600; color: var(--blue-dark); background: var(--offwhite); padding: 2px 8px; border-radius: 8px; margin-left: 6px; white-space: nowrap; }
+.nota { font-size: 0.82rem; color: var(--blue-dark); margin-top: 12px; }
+
+.navegacao { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 24px; }
+.navegacao .btn { width: 100%; padding-left: 12px; padding-right: 12px; }
+.navegacao .prox { grid-column: 2; }
+.navegacao .ant { grid-column: 1; }
+
+.fechado { text-align: center; padding: 32px 20px; }
+.fechado h1 { font-size: 1.6rem; margin-bottom: 12px; }
+.fechado .btn { margin-top: 20px; }
+
+.aviso {
+  position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 480px; margin: 0 auto;
+  background: var(--ink); color: var(--offwhite); padding: 14px 16px; border-radius: 14px;
+  font-weight: 600; font-size: 0.92rem; box-shadow: var(--shadow-hard); z-index: 20;
+}
+.aviso.erro { background: var(--erro); }
+
+@media (min-width: 640px) {
+  main { padding-top: 40px; }
+  .card { padding: 28px 28px; }
+  .anel { width: 112px; height: 112px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
