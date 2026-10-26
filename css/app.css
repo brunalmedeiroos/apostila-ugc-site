@@ -280,3 +280,12 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue-dark); }
 .ficha-form .acoes { margin-top: 16px; }
 select { width: 100%; font: inherit; color: var(--ink); background: var(--white); border: 2px solid var(--linha); border-radius: 12px; padding: 12px 14px; min-height: 48px; }
 select:focus { outline: none; border-color: var(--blue-dark); }
+
+/* ---------- Meu cadastro ---------- */
+.cartao-cadastro { margin-bottom: 16px; }
+.cartao-cadastro h2 { margin-bottom: 4px; }
+.cartao-cadastro > p { margin-bottom: 4px; }
+.cadastro-form .btn { margin-top: 18px; }
+.topo > span { display: flex; align-items: center; gap: 8px; }
+.ficha-ligar { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--linha); }
+.ficha-ligar .btn { margin-top: 12px; width: 100%; }

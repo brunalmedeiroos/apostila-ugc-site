@@ -19,7 +19,7 @@ const abertos = new Set(agenda.filter((a) => a.libera_em && new Date(a.libera_em
 const server = await servir();
 const browser = await chromium.launch();
 
-async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null, participantes = [] } = {}) {
+async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null, participantes = [], minhaFicha = null, apelidoEmUso = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Fortaleza' });
   const pagina = await ctx.newPage();
   const progresso = [...progressoInicial];
@@ -32,6 +32,11 @@ async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = 
     if (u.pathname.startsWith('/rest/v1/rpc/')) {
       const nome = u.pathname.split('/').pop(); const corpo = req.postData() ? JSON.parse(req.postData()) : {};
       if (nome === 'is_admin') return json(admin);
+      if (nome === 'minha_ficha') return minhaFicha === 'sem-suporte' ? json({ code: 'PGRST202', message: 'função não existe' }, 404) : json(minhaFicha);
+      if (nome === 'salvar_minha_ficha') {
+        if (apelidoEmUso) return json({ message: 'esse apelido já está em uso. Escolha outro, ou avise a Bruna se ele é seu' }, 400);
+        salvos.push({ nome, corpo }); return route.fulfill({ status: 204, body: '' });
+      }
       if (!admin) return json({ message: 'sem acesso', code: '42501' }, 403);
       if (nome === 'admin_dias') return json(agenda.map((a) => { const c = fixtures.conteudo.find((x) => x.numero === a.numero); return { ...a, ...c, documento: c.documento ?? null, video_id: (a.numero === 1 ? videoDia1 : null) }; }));
       if (nome === 'admin_participantes') return json(participantes);
@@ -113,6 +118,8 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   ok('lista: dia 4 bloqueado com "abre dia dd/mm"', /abre dia \d\d\/\d\d/.test(await itens.nth(3).textContent()) && (await itens.nth(3).getAttribute('aria-disabled')) === 'true');
   ok('lista: dia sem data mostra "em breve"', (await itens.nth(14).textContent()).includes('em breve'));
   ok('lista: anel 1/15', (await pagina.getAttribute('.anel', 'aria-label')) === '1 de 15 dias concluídos');
+  const soltos = await pagina.evaluate(() => { const r = []; const w = document.createTreeWalker(document.querySelector('main'), NodeFilter.SHOW_TEXT); while (w.nextNode()) { const t = w.currentNode.textContent.trim(); if (t === 'null' || t === 'undefined' || t === 'false') r.push(t); } return r; });
+  ok('lista: nenhum texto solto "null", "undefined" ou "false" na tela', soltos.length === 0, JSON.stringify(soltos));
   ok('lista: sem erros no console', erros.length === 0, erros.join(' | '));
   await foto(pagina, '2-lista');
   await pagina.context().close();
@@ -412,6 +419,73 @@ const PESSOAS = [
   const { pagina, pedidos } = await novaPagina({ admin: false, participantes: PESSOAS });
   await pagina.goto(url('#/admin/participantes')); await pagina.waitForSelector('.fechado');
   ok('participantes: quem não é admin vê "Área restrita" e nada é pedido', (await pagina.textContent('.fechado')).includes('Área restrita') && !pedidos.some((p) => p.includes('admin_participantes')));
+  await pagina.context().close();
+}
+
+// ---- 13. Meu cadastro (a menina preenche a própria ficha) ----
+{
+  const { pagina, salvos, erros } = await novaPagina({ minhaFicha: null });
+  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
+  ok('cadastro: sem ficha, aparece o cartão "Complete seu cadastro" no topo', await pagina.locator('.cartao-cadastro').isVisible() && (await pagina.locator('.cartao-cadastro input').count()) === 3);
+  ok('cadastro: avisa que só a Bruna vê nome e Instagram e que o apelido é público', (await pagina.textContent('.cartao-cadastro .privacidade')).includes('Só a Bruna vê') && (await pagina.textContent('.cartao-cadastro .privacidade')).includes('ranking'));
+  await foto(pagina, '13a-cadastro-cartao');
+  await pagina.getByRole('button', { name: 'Salvar meu cadastro' }).click(); await pagina.waitForTimeout(150);
+  ok('cadastro: sem nome, nada é enviado', salvos.length === 0 && (await pagina.textContent('.aviso')).includes('como você quer ser chamada'));
+  const campos = pagina.locator('.cartao-cadastro input');
+  await campos.nth(0).fill('Beatriz'); await campos.nth(1).fill('Bia'); await campos.nth(2).fill('@bia');
+  await pagina.getByRole('button', { name: 'Salvar meu cadastro' }).click(); await pagina.waitForTimeout(250);
+  const enviado = salvos.find((x) => x.nome === 'salvar_minha_ficha')?.corpo;
+  ok('cadastro: envia só nome, apelido e Instagram', JSON.stringify(enviado) === JSON.stringify({ p_nome: 'Beatriz', p_apelido: 'Bia', p_instagram: '@bia' }), JSON.stringify(enviado));
+  ok('cadastro: depois de salvar o cartão some', (await pagina.locator('.cartao-cadastro').count()) === 0);
+  ok('cadastro: sem erros no console', erros.length === 0, erros.join(' | '));
+  await pagina.context().close();
+}
+{
+  const { pagina, salvos } = await novaPagina({ minhaFicha: { nome: 'Beatriz', apelido: 'Bia', instagram: '@bia' } });
+  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
+  ok('cadastro: com ficha pronta, o cartão não aparece', (await pagina.locator('.cartao-cadastro').count()) === 0);
+  await pagina.getByRole('link', { name: 'Meu cadastro' }).click(); await pagina.waitForSelector('.cadastro-form');
+  ok('cadastro: "Meu cadastro" abre com os dados atuais', (await pagina.locator('.cadastro-form input').first().inputValue()) === 'Beatriz' && (await pagina.locator('.cadastro-form input').nth(1).inputValue()) === 'Bia');
+  await pagina.locator('.cadastro-form input').nth(1).fill('');
+  await pagina.getByRole('button', { name: 'Salvar', exact: true }).click(); await pagina.waitForTimeout(250);
+  ok('cadastro: apelido vazio é enviado como vazio (sai do ranking) e volta para a lista', salvos.at(-1).corpo.p_apelido === '' && (await pagina.locator('.lista-dias').isVisible()));
+  await pagina.context().close();
+}
+{
+  const { pagina, salvos } = await novaPagina({ minhaFicha: null, apelidoEmUso: true });
+  await pagina.goto(url()); await pagina.waitForSelector('.cartao-cadastro');
+  await pagina.locator('.cartao-cadastro input').nth(0).fill('Ana'); await pagina.locator('.cartao-cadastro input').nth(1).fill('Bia');
+  await pagina.getByRole('button', { name: 'Salvar meu cadastro' }).click(); await pagina.waitForTimeout(250);
+  ok('cadastro: apelido já usado mostra a mensagem amigável e mantém o cartão', (await pagina.textContent('.aviso')).includes('já está em uso') && (await pagina.locator('.cartao-cadastro').isVisible()));
+  await pagina.context().close();
+}
+{
+  // o site precisa continuar funcionando se o SQL do cadastro ainda não foi rodado
+  const { pagina, erros } = await novaPagina({ minhaFicha: 'sem-suporte' });
+  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
+  ok('cadastro: sem o SQL rodado, a lista abre normal, sem cartão e sem link', (await pagina.locator('.lista-dias .dia-item').count()) === 15 && (await pagina.locator('.cartao-cadastro, a:has-text("Meu cadastro")').count()) === 0);
+  await pagina.goto(url('#/cadastro')); await pagina.waitForSelector('.lista-dias');
+  ok('cadastro: sem o SQL rodado, abrir #/cadastro volta para a lista', true);
+  await pagina.context().close();
+}
+
+// ---- 14. Admin: ligar ficha antiga a um login ----
+{
+  const { pagina, salvos } = await novaPagina({ admin: true, participantes: PESSOAS });
+  await pagina.goto(url('#/admin/participantes')); await pagina.waitForSelector('text=entraram na apostila');
+  const fichas = pagina.locator('.lista-fichas').first().locator('.ficha');
+  await fichas.nth(1).locator('summary').click();
+  ok('ligar: ficha que já tem login NÃO mostra o botão de ligar', (await fichas.nth(1).locator('.ficha-ligar').count()) === 0);
+  await fichas.nth(2).locator('summary').click();
+  const ligar = fichas.nth(2).locator('.ficha-ligar');
+  ok('ligar: ficha sem login mostra a lista de logins que já entraram', (await ligar.locator('option').count()) === 3 && (await ligar.locator('option').nth(1).textContent()).includes('caro@teste.com'), await ligar.textContent());
+  await ligar.getByRole('button', { name: 'Ligar a este login' }).click(); await pagina.waitForTimeout(150);
+  ok('ligar: sem escolher um login, nada acontece', !salvos.some((x) => x.nome === 'admin_ligar_ficha'));
+  await ligar.locator('select').selectOption('u1');
+  pagina.on('dialog', (d) => d.accept());
+  await ligar.getByRole('button', { name: 'Ligar a este login' }).click(); await pagina.waitForTimeout(250);
+  const lig = salvos.find((x) => x.nome === 'admin_ligar_ficha')?.corpo;
+  ok('ligar: chama a função com a ficha e o login certos', lig?.p_ficha_id === 'f3' && lig?.p_user_id === 'u1', JSON.stringify(lig));
   await pagina.context().close();
 }
 

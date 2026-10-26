@@ -299,12 +299,31 @@ async function telaParticipantes({ db, mostrar, avisar }) {
       recarregar();
     });
     const campo = (rotulo, el, dica) => h('label', { class: 'campo' }, h('span', {}, rotulo), el, dica ? h('small', {}, dica) : null);
+
+    // Ficha cadastrada à mão (sem login): dá para ligar a um login que já entrou.
+    let ligar = null;
+    if (x.id && !x.user_id) {
+      const logins = pessoas.filter((o) => o.user_id);
+      const escolha = h('select', {}, h('option', { value: '' }, 'Escolha o login…'),
+        logins.map((o) => h('option', { value: o.user_id }, `${o.email}${o.nome ? ` (${o.nome})` : ' (sem ficha)'}`)));
+      const botaoLigar = h('button', { class: 'btn', type: 'button' }, 'Ligar a este login');
+      botaoLigar.addEventListener('click', async () => {
+        if (!escolha.value) return avisar('Escolha o login primeiro.', true);
+        if (!confirm('Ligar esta ficha a esse login? Se ela já preencheu o próprio cadastro, as duas viram uma só: vale o que você escreveu aqui, e o que estiver vazio vem do que ela escreveu.')) return;
+        const { error } = await db.rpc('admin_ligar_ficha', { p_ficha_id: x.id, p_user_id: escolha.value });
+        if (error) return avisar(`Não ligou: ${error.message}`, true);
+        avisar('Ficha ligada ao login.');
+        recarregar();
+      });
+      ligar = h('div', { class: 'ficha-ligar' }, campo('Esta pessoa já entrou na apostila?', escolha, 'Escolha o e-mail dela para juntar a ficha ao login.'), botaoLigar);
+    }
     return h('div', { class: 'ficha-form' },
       x.email ? h('p', { class: 'nota' }, `E-mail: ${x.email}`) : h('p', { class: 'nota' }, 'Ainda não entrou na apostila.'),
       x.entrou_em ? h('p', { class: 'nota' }, `Entrou em ${dataHoraFortaleza(x.entrou_em)}${x.ultimo_acesso ? `. Último acesso: ${dataHoraFortaleza(x.ultimo_acesso)}` : ''}.`) : null,
       campo('Nome', nome), campo('Apelido (o que aparece no ranking)', apelido, 'Deixe vazio para ela não aparecer no ranking.'),
       campo('Instagram', insta), campo('Situação', situacao), campo('Observações (só você vê)', obs),
-      h('div', { class: 'acoes' }, salvar, apagar));
+      h('div', { class: 'acoes' }, salvar, apagar),
+      ligar);
   };
 
   const linha = (x) => {
