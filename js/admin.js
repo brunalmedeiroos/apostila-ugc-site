@@ -20,9 +20,6 @@ export async function abrirAdmin({ db, mostrar, avisar, rota }) {
   if (e1) return mostrar(h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, e1.message)));
 
   if (rota === '#/admin/ranking') return telaRanking({ db, mostrar, avisar });
-  if (rota === '#/admin/participantes') return telaParticipantes({ db, mostrar, avisar });
-  const mp = rota.match(/^#\/admin\/pontos(?:\/(\d+))?$/);
-  if (mp) return telaPontos({ db, mostrar, avisar, dia: Math.min(15, Math.max(1, Number(mp[1] ?? 1))) });
   const m = rota.match(/^#\/admin\/dia\/(\d+)$/);
   if (m) {
     const dia = dias.find((d) => d.numero === Number(m[1]));
@@ -51,14 +48,14 @@ function telaLista({ db, mostrar, avisar, dias, config }) {
   });
 
   mostrar(
-    h('div', { class: 'topo' }, h('a', { class: 'btn-texto', href: '#/' }, '← Apostila'),
-      h('a', { class: 'btn-texto', href: PAINEL, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o Painel')),
+    h('div', { class: 'topo' }, h('a', { class: 'btn-texto', href: '#/' }, '← Apostila')),
     h('h1', { class: 'titulo-admin' }, 'Admin do desafio'),
+    h('section', { class: 'card painel-card' },
+      h('p', {}, 'Participantes, pontos, entregas e premiações ficam no seu Painel, na aba Desafio UGC.'),
+      h('a', { class: 'btn btn-primario', href: PAINEL, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o Painel')),
     h('section', { class: 'card secao' }, h('h2', {}, 'Grupo'),
       h('label', { class: 'campo', for: 'cfg-link' }, h('span', {}, 'Link do grupo'), link),
       h('label', { class: 'campo', for: 'cfg-insta' }, h('span', {}, '@ do Instagram'), insta), salvar),
-    h('a', { class: 'card ranking-link', href: '#/admin/pontos' }, h('span', { class: 'dia-titulo' }, 'Pontos'), h('span', { class: 'dia-lado' }, 'Lançar por dia')),
-    h('a', { class: 'card ranking-link', href: '#/admin/participantes' }, h('span', { class: 'dia-titulo' }, 'Participantes'), h('span', { class: 'dia-lado' }, 'Fichas e progresso')),
     h('a', { class: 'card ranking-link', href: '#/admin/ranking' }, h('span', { class: 'dia-titulo' }, 'Ranking'), h('span', { class: 'dia-lado' }, 'Editar e publicar')),
     h('nav', { class: 'card lista-dias', 'aria-label': 'Dias' }, linhas));
 }
@@ -224,19 +221,6 @@ async function telaRanking({ db, mostrar, avisar }) {
   };
   desenhar();
 
-  const calcular = h('button', { class: 'btn btn-primario', type: 'button' }, 'Calcular a partir dos pontos');
-  calcular.addEventListener('click', async () => {
-    calcular.disabled = true;
-    const { data: r, error: e } = await db.rpc('admin_ranking_calculado');
-    calcular.disabled = false;
-    if (e) return avisar(`Não calculou: ${e.message}`, true);
-    if (!r.linhas.length) { avisos.textContent = 'Ainda não há ninguém com apelido para entrar no ranking.'; return; }
-    if (linhas.length && !confirm(`Isto troca as ${linhas.length} linhas que estão na tela pelas ${r.linhas.length} calculadas. Continuar?`)) return;
-    linhas = r.linhas.map((l) => ({ apelido: l.apelido, pontos: l.pontos }));
-    avisos.replaceChildren(h('p', {}, `Calculei ${linhas.length} linhas com os pontos lançados.`),
-      ...(r.sem_apelido ? [h('p', {}, `${r.sem_apelido} participante(s) sem apelido ficaram de fora. Dê um apelido a elas em Participantes para entrarem.`)] : []));
-    desenhar();
-  });
   const ler = h('button', { class: 'btn', type: 'button' }, 'Ler a lista colada');
   ler.addEventListener('click', () => {
     const r = lerRanking(area.value);
@@ -262,10 +246,8 @@ async function telaRanking({ db, mostrar, avisar }) {
   mostrar(
     h('a', { class: 'btn-texto voltar', href: '#/admin' }, '← Admin'),
     h('h1', { class: 'titulo-admin' }, 'Ranking'),
-    h('section', { class: 'card secao' }, h('h2', {}, '1. Monte a lista'),
-      h('p', { class: 'nota' }, 'O jeito mais fácil: calcule a partir dos pontos lançados em Pontos. Quem não tem apelido fica de fora.'),
-      calcular,
-      h('p', { class: 'nota' }, 'Ou cole um ranking de outro lugar (uma pessoa por linha: Ana 40, Bia - 35, 1. Caro 30 pts):'),
+    h('section', { class: 'card secao' }, h('h2', {}, '1. Cole o ranking'),
+      h('p', { class: 'nota' }, 'Copie a lista do ranking do seu Painel e cole aqui. Pode ter posição na frente, "pts" no fim, ou colunas copiadas de uma tabela (uma pessoa por linha: Ana 40, Bia - 35, 1. Caro 30 pts).'),
       area, ler, avisos),
     h('section', { class: 'card secao' }, h('h2', {}, '2. Confira e corrija'), tabela,
       h('button', { class: 'btn-texto', type: 'button', onclick: () => { linhas.push({ apelido: '', pontos: 0 }); desenhar(); } }, '+ Adicionar linha'),
@@ -275,218 +257,4 @@ async function telaRanking({ db, mostrar, avisar }) {
       h('p', { class: 'nota' }, data.atualizado_em ? `Última publicação: ${dataHoraFortaleza(data.atualizado_em)} (horário de Fortaleza).` : 'Ainda não foi publicado.'),
       h('div', { class: 'acoes' }, publicar)),
     h('h2', { class: 'titulo-admin' }, 'Como as meninas veem'), previa);
-}
-
-// ---------- participantes ----------
-const SITUACOES = [['ativa', 'Ativa'], ['pausada', 'Pausada'], ['saiu', 'Saiu']];
-
-async function telaParticipantes({ db, mostrar, avisar }) {
-  const [lista, dias] = await Promise.all([db.rpc('admin_participantes'), db.rpc('admin_dias')]);
-  if (lista.error) return mostrar(h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, lista.error.message)));
-  const prontos = (dias.data ?? []).filter((d) => !d.em_breve).length;
-  const pessoas = lista.data;
-  const semFicha = pessoas.filter((x) => !x.id).length;
-  const recarregar = () => telaParticipantes({ db, mostrar, avisar });
-
-  // Formulário de uma ficha. `x` = linha da lista (ou {} para uma pessoa nova que ainda não entrou).
-  const formulario = (x) => {
-    const nome = h('input', { type: 'text', value: x.nome ?? (x.email ? x.email.split('@')[0] : ''), maxlength: 120 });
-    const apelido = h('input', { type: 'text', value: x.apelido ?? '', maxlength: 60 });
-    const insta = h('input', { type: 'text', value: x.instagram ?? '', maxlength: 60, placeholder: '@usuario' });
-    const situacao = h('select', {}, SITUACOES.map(([v, t]) => h('option', { value: v }, t)));
-    situacao.value = x.status ?? 'ativa';
-    const obs = h('textarea', { rows: 3, value: x.observacoes ?? '', maxlength: 2000 });
-    const salvar = h('button', { class: 'btn btn-primario', type: 'button' }, x.id ? 'Salvar ficha' : 'Criar ficha');
-    salvar.addEventListener('click', async () => {
-      if (!nome.value.trim()) return avisar('A ficha precisa de um nome.', true);
-      salvar.disabled = true;
-      const { error } = await db.rpc('admin_salvar_participante', { p: {
-        id: x.id ?? null, user_id: x.user_id ?? null, nome: nome.value, apelido: apelido.value, instagram: insta.value,
-        status: situacao.value, observacoes: obs.value } });
-      salvar.disabled = false;
-      if (error) return avisar(`Não salvou: ${error.message}`, true);
-      avisar('Ficha salva.');
-      recarregar();
-    });
-    const apagar = x.id ? h('button', { class: 'btn-texto', type: 'button' }, 'Apagar ficha') : null;
-    apagar?.addEventListener('click', async () => {
-      if (!confirm(`Apagar a ficha de ${x.nome}? Ela continua podendo entrar na apostila.`)) return;
-      const { error } = await db.rpc('admin_apagar_participante', { p_id: x.id });
-      if (error) return avisar(`Não apagou: ${error.message}`, true);
-      avisar('Ficha apagada.');
-      recarregar();
-    });
-    const campo = (rotulo, el, dica) => h('label', { class: 'campo' }, h('span', {}, rotulo), el, dica ? h('small', {}, dica) : null);
-
-    // Ficha cadastrada à mão (sem login): dá para ligar a um login que já entrou.
-    let ligar = null;
-    if (x.id && !x.user_id) {
-      const logins = pessoas.filter((o) => o.user_id);
-      const escolha = h('select', {}, h('option', { value: '' }, 'Escolha o login…'),
-        logins.map((o) => h('option', { value: o.user_id }, `${o.email}${o.nome ? ` (${o.nome})` : ' (sem ficha)'}`)));
-      const botaoLigar = h('button', { class: 'btn', type: 'button' }, 'Ligar a este login');
-      botaoLigar.addEventListener('click', async () => {
-        if (!escolha.value) return avisar('Escolha o login primeiro.', true);
-        if (!confirm('Ligar esta ficha a esse login? Se ela já preencheu o próprio cadastro, as duas viram uma só: vale o que você escreveu aqui, e o que estiver vazio vem do que ela escreveu.')) return;
-        const { error } = await db.rpc('admin_ligar_ficha', { p_ficha_id: x.id, p_user_id: escolha.value });
-        if (error) return avisar(`Não ligou: ${error.message}`, true);
-        avisar('Ficha ligada ao login.');
-        recarregar();
-      });
-      ligar = h('div', { class: 'ficha-ligar' }, campo('Esta pessoa já entrou na apostila?', escolha, 'Escolha o e-mail dela para juntar a ficha ao login.'), botaoLigar);
-    }
-    return h('div', { class: 'ficha-form' },
-      x.email ? h('p', { class: 'nota' }, `E-mail: ${x.email}`) : h('p', { class: 'nota' }, 'Ainda não entrou na apostila.'),
-      x.entrou_em ? h('p', { class: 'nota' }, `Entrou em ${dataHoraFortaleza(x.entrou_em)}${x.ultimo_acesso ? `. Último acesso: ${dataHoraFortaleza(x.ultimo_acesso)}` : ''}.`) : null,
-      campo('Nome', nome), campo('Apelido (o que aparece no ranking)', apelido, 'Deixe vazio para ela não aparecer no ranking.'),
-      campo('Instagram', insta), campo('Situação', situacao), campo('Observações (só você vê)', obs),
-      h('div', { class: 'acoes' }, salvar, apagar),
-      ligar);
-  };
-
-  const linha = (x) => {
-    const titulo = x.nome ?? x.email?.split('@')[0] ?? 'Sem nome';
-    const andamento = x.user_id ? `${x.dias_concluidos}/${prontos} dias` : 'não entrou';
-    return h('details', { class: 'ficha' },
-      h('summary', {},
-        h('span', { class: 'dia-texto' },
-          h('span', { class: 'dia-titulo' }, titulo),
-          h('span', { class: 'dia-num' }, [!x.id ? 'sem ficha' : x.apelido ? `apelido: ${x.apelido}` : 'sem apelido', x.status !== 'ativa' ? x.status : null].filter(Boolean).join(' · '))),
-        h('span', { class: 'dia-lado' }, andamento)),
-      formulario(x));
-  };
-
-  const nova = h('details', { class: 'ficha' }, h('summary', {}, h('span', { class: 'dia-titulo' }, '+ Cadastrar quem ainda não entrou')), formulario({}));
-
-  mostrar(
-    h('a', { class: 'btn-texto voltar', href: '#/admin' }, '← Admin'),
-    h('h1', { class: 'titulo-admin' }, 'Participantes'),
-    h('p', { class: 'nota' }, `${pessoas.filter((x) => x.user_id).length} entraram na apostila${semFicha ? `, ${semFicha} ainda sem ficha` : ''}. "Dias" conta quem concluiu todos os itens obrigatórios do checklist. Hoje há ${prontos} ${prontos === 1 ? 'dia pronto' : 'dias prontos'}.`),
-    h('div', { class: 'card lista-fichas' }, pessoas.length ? pessoas.map(linha) : h('p', {}, 'Ninguém entrou ainda.')),
-    h('div', { class: 'card lista-fichas' }, nova));
-}
-
-// ---------- pontos ----------
-async function telaPontos({ db, mostrar, avisar, dia }) {
-  const [pd, dd] = await Promise.all([db.rpc('admin_pontuacao_dia', { p_dia: dia }), db.rpc('admin_dias')]);
-  if (pd.error) return mostrar(h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, pd.error.message)));
-  const { itens, participantes } = pd.data;
-  const recarregar = () => telaPontos({ db, mostrar, avisar, dia });
-
-  const seletorDia = h('select', { 'aria-label': 'Dia', onchange: (e) => { location.hash = `#/admin/pontos/${e.target.value}`; } },
-    (dd.data ?? []).map((d) => h('option', { value: d.numero }, `Dia ${d.numero}: ${d.titulo}`)));
-  seletorDia.value = String(dia);
-
-  // 1. itens que valem ponto neste dia
-  const linhasItens = h('div', { class: 'linhas' });
-  const totalItens = h('p', { class: 'nota' });
-  const somaTotal = () => {
-    const t = [...linhasItens.children].reduce((a, l) => a + (Number(l._ler().pontos) || 0), 0);
-    totalItens.textContent = `Total do dia: ${t} pontos.`;
-  };
-  const addItem = (i = {}) => {
-    const texto = h('input', { type: 'text', value: i.texto ?? '', maxlength: 200, placeholder: 'Ex.: A marca escolhida', oninput: somaTotal, 'aria-label': 'O que vale ponto' });
-    const pontos = h('input', { type: 'number', min: 0, max: 1000, value: i.pontos ?? '', oninput: somaTotal, 'aria-label': 'Pontos' });
-    const x = h('button', { class: 'btn-texto', type: 'button' }, 'Remover');
-    const linha = h('div', { class: 'linha linha-item' }, texto, pontos, x);
-    x.addEventListener('click', () => { linha.remove(); somaTotal(); });
-    linha._ler = () => ({ id: i.id, texto: texto.value.trim(), pontos: pontos.value });
-    linhasItens.append(linha);
-  };
-  itens.forEach(addItem);
-  somaTotal();
-  const salvarItens = h('button', { class: 'btn btn-primario', type: 'button' }, 'Salvar itens do dia');
-  salvarItens.addEventListener('click', async () => {
-    const lista = [...linhasItens.children].map((l) => l._ler()).filter((i) => i.texto || i.pontos !== '');
-    if (lista.some((i) => !i.texto || !/^\d+$/.test(String(i.pontos)))) return avisar('Todo item precisa de um texto e de pontos (número inteiro, zero ou mais).', true);
-    salvarItens.disabled = true;
-    const { error } = await db.rpc('admin_salvar_pontuacao_dia', { p_dia: dia, p_itens: lista.map((i) => ({ id: i.id ?? novoIdChecklist(i.texto), texto: i.texto, pontos: Number(i.pontos) })) });
-    salvarItens.disabled = false;
-    if (error) return avisar(`Não salvou: ${error.message}`, true);
-    avisar('Itens salvos. O que já foi dado não muda.');
-    recarregar();
-  });
-
-  // 2. quem cumpriu
-  const quem = !itens.length
-    ? h('p', { class: 'nota' }, 'Defina e salve os itens do dia acima para poder marcar quem cumpriu.')
-    : participantes.length
-      ? h('div', { class: 'lancar' }, participantes.map((p) => {
-          const total = h('span', { class: 'total-dia' }, `${p.total_dia} pts`);
-          const caixas = itens.map((i) => {
-            const c = h('input', { type: 'checkbox', 'data-item': i.id });
-            c.checked = p.feitos.includes(i.id);
-            c.addEventListener('change', async () => {
-              const marcados = [...c.closest('.pessoa-pontos').querySelectorAll('input[type=checkbox]')].filter((x) => x.checked).map((x) => x.dataset.item);
-              c.disabled = true;
-              const { data, error } = await db.rpc('admin_lancar_pontos_dia', { p_dia: dia, p_participante: p.id, p_itens: marcados });
-              c.disabled = false;
-              if (error) { c.checked = !c.checked; return avisar(`Não salvou: ${error.message}`, true); }
-              total.textContent = `${data} pts`;
-            });
-            return h('label', { class: 'check mini-check' }, c, h('span', {}, `${i.texto} (${i.pontos})`));
-          });
-          return h('div', { class: 'pessoa-pontos' },
-            h('div', { class: 'pessoa-topo' }, h('strong', {}, p.apelido ?? p.nome), p.apelido && p.apelido !== p.nome ? h('span', { class: 'nota' }, p.nome) : null, total), caixas);
-        }))
-      : h('p', { class: 'nota' }, 'Ainda não há participantes. Cadastre em Participantes.');
-
-  // 3. ponto extra ou desconto
-  const opcoes = () => participantes.map((p) => h('option', { value: p.id }, p.apelido ?? p.nome));
-  const selExtra = h('select', { 'aria-label': 'Participante' }, opcoes());
-  const motivo = h('input', { type: 'text', maxlength: 200, placeholder: 'Motivo (ex.: ajudou no grupo)' });
-  const ptsExtra = h('input', { type: 'number', placeholder: 'Pontos (use - para descontar)' });
-  const lancar = h('button', { class: 'btn', type: 'button' }, 'Lançar');
-  lancar.addEventListener('click', async () => {
-    if (!selExtra.value) return avisar('Escolha a participante.', true);
-    if (!motivo.value.trim()) return avisar('Escreva o motivo.', true);
-    const n = Number(ptsExtra.value);
-    if (!Number.isInteger(n) || n === 0) return avisar('Os pontos precisam ser um número inteiro diferente de zero.', true);
-    lancar.disabled = true;
-    const { error } = await db.rpc('admin_lancar_extra', { p_participante: selExtra.value, p_motivo: motivo.value, p_pontos: n, p_obs: null });
-    lancar.disabled = false;
-    if (error) return avisar(`Não lançou: ${error.message}`, true);
-    avisar('Lançado.'); motivo.value = ''; ptsExtra.value = ''; mostraHistorico();
-  });
-
-  // 4. histórico
-  const selHist = h('select', { 'aria-label': 'Ver histórico de' }, h('option', { value: '' }, 'Escolha…'), opcoes());
-  const hist = h('div', { class: 'historico' });
-  async function mostraHistorico() {
-    const id = selHist.value || selExtra.value;
-    if (selHist.value !== id) selHist.value = id;
-    if (!id) return hist.replaceChildren();
-    const { data, error } = await db.rpc('admin_historico_pontos', { p_participante: id });
-    if (error) return avisar(error.message, true);
-    const soma = data.filter((x) => x.valido).reduce((a, x) => a + x.pontos, 0);
-    hist.replaceChildren(h('p', { class: 'nota' }, `Total válido: ${soma} pontos.`),
-      data.length ? h('ul', { class: 'hist-lista' }, data.map((x) => {
-        const anular = x.valido ? h('button', { class: 'btn-texto', type: 'button' }, 'Anular') : null;
-        anular?.addEventListener('click', async () => {
-          if (!confirm(`Anular "${x.motivo}" (${x.pontos} pontos)? Fica no histórico como anulado.`)) return;
-          const { error: e } = await db.rpc('admin_anular_ponto', { p_id: x.id });
-          if (e) return avisar(e.message, true);
-          avisar('Anulado.'); mostraHistorico();
-        });
-        return h('li', { class: x.valido ? '' : 'anulado' },
-          h('span', { class: 'hist-texto' }, `${x.dia ? `Dia ${x.dia}: ` : ''}${x.motivo}`, x.valido ? null : ' (anulado)'),
-          h('span', { class: 'hist-pts' }, `${x.pontos > 0 ? '+' : ''}${x.pontos}`), anular);
-      })) : h('p', { class: 'nota' }, 'Nenhum lançamento ainda.'));
-  }
-  selHist.addEventListener('change', mostraHistorico);
-
-  mostrar(
-    h('a', { class: 'btn-texto voltar', href: '#/admin' }, '← Admin'),
-    h('h1', { class: 'titulo-admin' }, 'Pontos'),
-    h('label', { class: 'campo' }, h('span', {}, 'Dia'), seletorDia),
-    h('section', { class: 'card secao' }, h('h2', {}, `1. O que vale ponto no Dia ${dia}`),
-      linhasItens, h('button', { class: 'btn-texto', type: 'button', onclick: () => { addItem(); somaTotal(); } }, '+ Adicionar item'),
-      totalItens, h('div', { class: 'acoes' }, salvarItens)),
-    h('section', { class: 'card secao' }, h('h2', {}, '2. Quem cumpriu'), quem,
-      itens.length ? h('p', { class: 'nota' }, 'Cada marcação salva na hora. Desmarcar anula e fica no histórico.') : null),
-    h('section', { class: 'card secao' }, h('h2', {}, '3. Ponto extra ou desconto'),
-      participantes.length ? [h('label', { class: 'campo' }, h('span', {}, 'Participante'), selExtra), h('label', { class: 'campo' }, h('span', {}, 'Motivo'), motivo),
-        h('label', { class: 'campo' }, h('span', {}, 'Pontos'), ptsExtra), h('div', { class: 'acoes' }, lancar)] : h('p', { class: 'nota' }, 'Sem participantes ainda.')),
-    h('section', { class: 'card secao' }, h('h2', {}, '4. Histórico de uma participante'),
-      h('label', { class: 'campo' }, h('span', {}, 'Participante'), selHist), hist));
 }

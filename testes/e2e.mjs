@@ -19,13 +19,7 @@ const abertos = new Set(agenda.filter((a) => a.libera_em && new Date(a.libera_em
 const server = await servir();
 const browser = await chromium.launch();
 
-const PONTUACAO = { itens: [{ id: 'marca', texto: 'A marca escolhida', pontos: 5 }, { id: 'ref', texto: 'Uma referência', pontos: 5 }, { id: 'ideia', texto: 'Sua ideia', pontos: 10 }],
-  participantes: [{ id: 'p1', nome: 'Ana Souza', apelido: 'Ana', status: 'ativa', feitos: ['marca'], total_dia: 5 }, { id: 'p2', nome: 'Bia', apelido: 'Bia', status: 'ativa', feitos: [], total_dia: 0 }] };
-const HISTORICO = [{ id: 'h1', dia: 1, motivo: 'A marca escolhida', pontos: 5, valido: true, anulado_em: null, criado_em: '2026-10-26T12:00:00+00:00', observacao: null },
-  { id: 'h2', dia: null, motivo: 'Atraso', pontos: -2, valido: false, anulado_em: '2026-10-26T13:00:00+00:00', criado_em: '2026-10-26T12:30:00+00:00', observacao: null }];
-const CALCULADO = { linhas: [{ apelido: 'Ana', pontos: 20, entregas: 3 }, { apelido: 'Bia', pontos: 7, entregas: 1 }], sem_apelido: 2 };
-
-async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null, participantes = [], minhaFicha = null, apelidoEmUso = false, falhaLancar = false } = {}) {
+async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Fortaleza' });
   const pagina = await ctx.newPage();
   const progresso = [...progressoInicial];
@@ -38,22 +32,8 @@ async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = 
     if (u.pathname.startsWith('/rest/v1/rpc/')) {
       const nome = u.pathname.split('/').pop(); const corpo = req.postData() ? JSON.parse(req.postData()) : {};
       if (nome === 'is_admin') return json(admin);
-      if (nome === 'minha_ficha') return minhaFicha === 'sem-suporte' ? json({ code: 'PGRST202', message: 'função não existe' }, 404) : json(minhaFicha);
-      if (nome === 'salvar_minha_ficha') {
-        if (apelidoEmUso) return json({ message: 'esse apelido já está em uso. Escolha outro, ou avise a Bruna se ele é seu' }, 400);
-        salvos.push({ nome, corpo }); return route.fulfill({ status: 204, body: '' });
-      }
       if (!admin) return json({ message: 'sem acesso', code: '42501' }, 403);
       if (nome === 'admin_dias') return json(agenda.map((a) => { const c = fixtures.conteudo.find((x) => x.numero === a.numero); return { ...a, ...c, documento: c.documento ?? null, video_id: (a.numero === 1 ? videoDia1 : null) }; }));
-      if (nome === 'admin_participantes') return json(participantes);
-      if (nome === 'admin_pontuacao_dia') return json(PONTUACAO);
-      if (nome === 'admin_historico_pontos') return json(HISTORICO);
-      if (nome === 'admin_ranking_calculado') return json(CALCULADO);
-      if (nome === 'admin_lancar_pontos_dia') {
-        if (falhaLancar) return json({ message: 'boom' }, 500);
-        salvos.push({ nome, corpo });
-        return json(PONTUACAO.itens.filter((i) => corpo.p_itens.includes(i.id)).reduce((a, i) => a + i.pontos, 0));
-      }
       if (nome === 'admin_ranking') return json({ visivel: Boolean(ranking?.visivel), atualizado_em: ranking ? '2026-10-26T17:30:00+00:00' : null, linhas: ranking?.linhas ?? [] });
       salvos.push({ nome, corpo }); return route.fulfill({ status: 204, body: '' });
     }
@@ -350,7 +330,7 @@ const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { a
 {
   const { pagina, salvos } = await novaPagina({ admin: true, ranking: { visivel: false, linhas: [{ apelido: 'Velha', pontos: 1 }] } });
   await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
-  await pagina.locator('.ranking-link:has-text("Ranking")').click(); await pagina.waitForSelector('text=Monte a lista');
+  await pagina.locator('.ranking-link:has-text("Ranking")').click(); await pagina.waitForSelector('text=Cole o ranking');
   ok('admin ranking: abre com a lista já publicada', (await pagina.locator('.linha-rank').count()) === 1);
   pagina.on('dialog', (d) => d.accept());
   await pagina.locator('textarea').fill('Lu 40\nBia - 40\n1. Ana 20 pts\nlinha sem número');
@@ -375,219 +355,25 @@ const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { a
   await pagina.context().close();
 }
 
-// ---- 12. Admin: participantes ----
-const PESSOAS = [
-  { id: null, user_id: 'u1', email: 'caro@teste.com', entrou_em: '2026-10-26T12:00:00+00:00', ultimo_acesso: null, nome: null, apelido: null, instagram: null, status: 'ativa', observacoes: null, dias_concluidos: 0 },
-  { id: 'f2', user_id: 'u2', email: 'bia@teste.com', entrou_em: '2026-10-25T12:00:00+00:00', ultimo_acesso: '2026-10-26T15:30:00+00:00', nome: 'Beatriz', apelido: 'Bia', instagram: '@bia', status: 'ativa', observacoes: 'vem do Painel', dias_concluidos: 1 },
-  { id: 'f3', user_id: null, email: null, entrou_em: null, ultimo_acesso: null, nome: 'Lu', apelido: null, instagram: null, status: 'pausada', observacoes: null, dias_concluidos: 0 },
-];
+// ---- 12. Simplificação: o que ficou no Painel não aparece aqui ----
 {
-  const { pagina, salvos, erros } = await novaPagina({ admin: true, participantes: PESSOAS });
-  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
-  await pagina.locator('.ranking-link:has-text("Participantes")').click(); await pagina.waitForSelector('text=entraram na apostila');
-  const fichas = pagina.locator('.lista-fichas').first().locator('.ficha');
-  ok('participantes: lista as 3 pessoas', (await fichas.count()) === 3);
-  const resumos = await fichas.locator('summary').allTextContents();
-  ok('participantes: login sem ficha aparece como "sem ficha" e mostra o nome pelo e-mail', resumos[0].includes('caro') && resumos[0].includes('sem ficha'), resumos[0]);
-  ok('participantes: mostra o progresso (1 de 1 dia pronto) e quem ainda não entrou', resumos[1].includes('1/1 dias') && resumos[2].includes('não entrou') && resumos[2].includes('pausada'), JSON.stringify(resumos));
-  ok('participantes: resumo conta quem entrou e quem está sem ficha', (await pagina.textContent('p.nota')).includes('2 entraram na apostila, 1 ainda sem ficha'));
-
-  await fichas.nth(0).locator('summary').click();
-  ok('participantes: o nome vem sugerido do e-mail', (await fichas.nth(0).locator('input[type=text]').first().inputValue()) === 'caro');
-  await fichas.nth(0).locator('input[type=text]').first().fill('Carolina');
-  await fichas.nth(0).locator('input[type=text]').nth(1).fill('Caro');
-  await fichas.nth(0).getByRole('button', { name: 'Criar ficha' }).click(); await pagina.waitForTimeout(250);
-  const criar = salvos.find((x) => x.nome === 'admin_salvar_participante')?.corpo.p;
-  ok('participantes: criar ficha liga ao login certo', criar?.user_id === 'u1' && criar.id === null && criar.nome === 'Carolina' && criar.apelido === 'Caro', JSON.stringify(criar));
-
-  await pagina.waitForSelector('.lista-fichas .ficha');
-  await pagina.locator('.lista-fichas').first().locator('.ficha').nth(1).locator('summary').click();
-  const f2 = pagina.locator('.lista-fichas').first().locator('.ficha').nth(1);
-  await f2.locator('select').selectOption('saiu');
-  await f2.locator('input[type=text]').nth(1).fill('Bi');
-  await f2.getByRole('button', { name: 'Salvar ficha' }).click(); await pagina.waitForTimeout(250);
-  const edit = salvos.filter((x) => x.nome === 'admin_salvar_participante').at(-1).corpo.p;
-  ok('participantes: editar envia o id da ficha, a situação e o novo apelido', edit.id === 'f2' && edit.status === 'saiu' && edit.apelido === 'Bi' && edit.observacoes === 'vem do Painel', JSON.stringify(edit));
-
-  const antes = salvos.length;
-  await pagina.locator('.lista-fichas').first().locator('.ficha').nth(2).locator('summary').click();
-  const f3 = pagina.locator('.lista-fichas').first().locator('.ficha').nth(2);
-  await f3.locator('input[type=text]').first().fill('');
-  await f3.getByRole('button', { name: 'Salvar ficha' }).click(); await pagina.waitForTimeout(200);
-  ok('participantes: ficha sem nome não é enviada', salvos.length === antes && (await pagina.textContent('.aviso')).includes('nome'));
-
-  pagina.on('dialog', (d) => d.accept());
-  await f3.getByRole('button', { name: 'Apagar ficha' }).click(); await pagina.waitForTimeout(250);
-  ok('participantes: apagar ficha chama a função com o id', salvos.some((x) => x.nome === 'admin_apagar_participante' && x.corpo.p_id === 'f3'));
-
-  await pagina.locator('.lista-fichas').nth(1).locator('summary').click();
-  await pagina.locator('.lista-fichas').nth(1).locator('input[type=text]').first().fill('Nova Pessoa');
-  await pagina.locator('.lista-fichas').nth(1).getByRole('button', { name: 'Criar ficha' }).click(); await pagina.waitForTimeout(250);
-  const nova = salvos.filter((x) => x.nome === 'admin_salvar_participante').at(-1).corpo.p;
-  ok('participantes: cadastrar quem ainda não entrou (sem login)', nova.nome === 'Nova Pessoa' && nova.user_id === null && nova.id === null, JSON.stringify(nova));
-  ok('participantes: sem erros no console', erros.length === 0, erros.join(' | '));
-  await foto(pagina, '12-participantes');
+  const { pagina, pedidos, erros } = await novaPagina({ admin: true });
+  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.painel-card');
+  ok('admin: cartão do Painel explica o que fica lá e abre o login do Painel', (await pagina.textContent('.painel-card p')).includes('ficam no seu Painel') && (await pagina.getAttribute('.painel-card a', 'href')) === 'https://brunamedeiros.com/login' && (await pagina.getAttribute('.painel-card a', 'rel')) === 'noopener noreferrer');
+  ok('admin: só sobram dias e Ranking (sem Participantes nem Pontos)', (await pagina.locator('.ranking-link').count()) === 1 && (await pagina.textContent('.ranking-link')).includes('Ranking') && !(await pagina.textContent('main')).match(/Fichas e progresso|Lançar por dia/));
+  await pagina.goto(url('#/admin/participantes')); await pagina.waitForSelector('.titulo-admin');
+  ok('admin: endereços antigos de participantes e pontos caem na lista do admin', (await pagina.textContent('.titulo-admin')) === 'Admin do desafio');
+  ok('admin: sem erros no console', erros.length === 0, erros.join(' | '));
+  await foto(pagina, '12-admin-painel');
   await pagina.context().close();
 }
 {
-  const { pagina, pedidos } = await novaPagina({ admin: false, participantes: PESSOAS });
-  await pagina.goto(url('#/admin/participantes')); await pagina.waitForSelector('.fechado');
-  ok('participantes: quem não é admin vê "Área restrita" e nada é pedido', (await pagina.textContent('.fechado')).includes('Área restrita') && !pedidos.some((p) => p.includes('admin_participantes')));
-  await pagina.context().close();
-}
-
-// ---- 13. Meu cadastro (a menina preenche a própria ficha) ----
-{
-  const { pagina, salvos, erros } = await novaPagina({ minhaFicha: null });
+  const { pagina, pedidos } = await novaPagina({});
   await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
-  ok('cadastro: sem ficha, aparece o cartão "Complete seu cadastro" no topo', await pagina.locator('.cartao-cadastro').isVisible() && (await pagina.locator('.cartao-cadastro input').count()) === 3);
-  ok('cadastro: avisa que só a Bruna vê nome e Instagram e que o apelido é público', (await pagina.textContent('.cartao-cadastro .privacidade')).includes('Só a Bruna vê') && (await pagina.textContent('.cartao-cadastro .privacidade')).includes('ranking'));
-  await foto(pagina, '13a-cadastro-cartao');
-  await pagina.getByRole('button', { name: 'Salvar meu cadastro' }).click(); await pagina.waitForTimeout(150);
-  ok('cadastro: sem nome, nada é enviado', salvos.length === 0 && (await pagina.textContent('.aviso')).includes('como você quer ser chamada'));
-  const campos = pagina.locator('.cartao-cadastro input');
-  await campos.nth(0).fill('Beatriz'); await campos.nth(1).fill('Bia'); await campos.nth(2).fill('@bia');
-  await pagina.getByRole('button', { name: 'Salvar meu cadastro' }).click(); await pagina.waitForTimeout(250);
-  const enviado = salvos.find((x) => x.nome === 'salvar_minha_ficha')?.corpo;
-  ok('cadastro: envia só nome, apelido e Instagram', JSON.stringify(enviado) === JSON.stringify({ p_nome: 'Beatriz', p_apelido: 'Bia', p_instagram: '@bia' }), JSON.stringify(enviado));
-  ok('cadastro: depois de salvar o cartão some', (await pagina.locator('.cartao-cadastro').count()) === 0);
-  ok('cadastro: sem erros no console', erros.length === 0, erros.join(' | '));
-  await pagina.context().close();
-}
-{
-  const { pagina, salvos } = await novaPagina({ minhaFicha: { nome: 'Beatriz', apelido: 'Bia', instagram: '@bia' } });
-  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
-  ok('cadastro: com ficha pronta, o cartão não aparece', (await pagina.locator('.cartao-cadastro').count()) === 0);
-  await pagina.getByRole('link', { name: 'Meu cadastro' }).click(); await pagina.waitForSelector('.cadastro-form');
-  ok('cadastro: "Meu cadastro" abre com os dados atuais', (await pagina.locator('.cadastro-form input').first().inputValue()) === 'Beatriz' && (await pagina.locator('.cadastro-form input').nth(1).inputValue()) === 'Bia');
-  await pagina.locator('.cadastro-form input').nth(1).fill('');
-  await pagina.getByRole('button', { name: 'Salvar', exact: true }).click(); await pagina.waitForTimeout(250);
-  ok('cadastro: apelido vazio é enviado como vazio (sai do ranking) e volta para a lista', salvos.at(-1).corpo.p_apelido === '' && (await pagina.locator('.lista-dias').isVisible()));
-  await pagina.context().close();
-}
-{
-  const { pagina, salvos } = await novaPagina({ minhaFicha: null, apelidoEmUso: true });
-  await pagina.goto(url()); await pagina.waitForSelector('.cartao-cadastro');
-  await pagina.locator('.cartao-cadastro input').nth(0).fill('Ana'); await pagina.locator('.cartao-cadastro input').nth(1).fill('Bia');
-  await pagina.getByRole('button', { name: 'Salvar meu cadastro' }).click(); await pagina.waitForTimeout(250);
-  ok('cadastro: apelido já usado mostra a mensagem amigável e mantém o cartão', (await pagina.textContent('.aviso')).includes('já está em uso') && (await pagina.locator('.cartao-cadastro').isVisible()));
-  await pagina.context().close();
-}
-{
-  // o site precisa continuar funcionando se o SQL do cadastro ainda não foi rodado
-  const { pagina, erros } = await novaPagina({ minhaFicha: 'sem-suporte' });
-  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
-  ok('cadastro: sem o SQL rodado, a lista abre normal, sem cartão e sem link', (await pagina.locator('.lista-dias .dia-item').count()) === 15 && (await pagina.locator('.cartao-cadastro, a:has-text("Meu cadastro")').count()) === 0);
+  ok('menina: não aparece cartão de cadastro nem link "Meu cadastro"', (await pagina.locator('.cartao-cadastro, a:has-text("Meu cadastro")').count()) === 0);
+  ok('menina: o site não pede mais a ficha ao servidor (nada de dados extras)', !pedidos.some((p) => p.includes('minha_ficha')));
   await pagina.goto(url('#/cadastro')); await pagina.waitForSelector('.lista-dias');
-  ok('cadastro: sem o SQL rodado, abrir #/cadastro volta para a lista', true);
-  await pagina.context().close();
-}
-
-// ---- 14. Admin: ligar ficha antiga a um login ----
-{
-  const { pagina, salvos } = await novaPagina({ admin: true, participantes: PESSOAS });
-  await pagina.goto(url('#/admin/participantes')); await pagina.waitForSelector('text=entraram na apostila');
-  const fichas = pagina.locator('.lista-fichas').first().locator('.ficha');
-  await fichas.nth(1).locator('summary').click();
-  ok('ligar: ficha que já tem login NÃO mostra o botão de ligar', (await fichas.nth(1).locator('.ficha-ligar').count()) === 0);
-  await fichas.nth(2).locator('summary').click();
-  const ligar = fichas.nth(2).locator('.ficha-ligar');
-  ok('ligar: ficha sem login mostra a lista de logins que já entraram', (await ligar.locator('option').count()) === 3 && (await ligar.locator('option').nth(1).textContent()).includes('caro@teste.com'), await ligar.textContent());
-  await ligar.getByRole('button', { name: 'Ligar a este login' }).click(); await pagina.waitForTimeout(150);
-  ok('ligar: sem escolher um login, nada acontece', !salvos.some((x) => x.nome === 'admin_ligar_ficha'));
-  await ligar.locator('select').selectOption('u1');
-  pagina.on('dialog', (d) => d.accept());
-  await ligar.getByRole('button', { name: 'Ligar a este login' }).click(); await pagina.waitForTimeout(250);
-  const lig = salvos.find((x) => x.nome === 'admin_ligar_ficha')?.corpo;
-  ok('ligar: chama a função com a ficha e o login certos', lig?.p_ficha_id === 'f3' && lig?.p_user_id === 'u1', JSON.stringify(lig));
-  await pagina.context().close();
-}
-
-// ---- 15. Admin: pontos ----
-{
-  const { pagina, salvos, erros } = await novaPagina({ admin: true });
-  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
-  await pagina.locator('.ranking-link:has-text("Pontos")').click(); await pagina.waitForSelector('text=O que vale ponto no Dia 1');
-  ok('pontos: mostra os 3 itens do dia e o total de 20', (await pagina.locator('.linha-item').count()) === 3 && (await pagina.textContent('.secao:has(h2:text("O que vale ponto")) .nota')).includes('Total do dia: 20 pontos'));
-  ok('pontos: lista as participantes e mostra quem já cumpriu', (await pagina.locator('.pessoa-pontos').count()) === 2 && (await pagina.locator('.pessoa-pontos').first().locator('input:checked').count()) === 1 && (await pagina.locator('.pessoa-pontos').first().locator('.total-dia').textContent()) === '5 pts');
-  await pagina.locator('.pessoa-pontos').first().locator('[data-item="ref"]').check(); await pagina.waitForTimeout(250);
-  const l1 = salvos.find((x) => x.nome === 'admin_lancar_pontos_dia')?.corpo;
-  ok('pontos: marcar um item salva na hora a lista completa de marcados', l1?.p_dia === 1 && l1.p_participante === 'p1' && JSON.stringify(l1.p_itens) === JSON.stringify(['marca', 'ref']), JSON.stringify(l1));
-  ok('pontos: o total da pessoa se atualiza com a resposta do servidor', (await pagina.locator('.pessoa-pontos').first().locator('.total-dia').textContent()) === '10 pts');
-  await pagina.locator('.pessoa-pontos').first().locator('[data-item="marca"]').uncheck(); await pagina.waitForTimeout(250);
-  ok('pontos: desmarcar envia a lista sem o item', JSON.stringify(salvos.filter((x) => x.nome === 'admin_lancar_pontos_dia').at(-1).corpo.p_itens) === JSON.stringify(['ref']));
-  await foto(pagina, '15-pontos');
-
-  // itens do dia
-  const campos = pagina.locator('.linha-item');
-  await campos.nth(2).locator('input[type=number]').fill('8');
-  ok('pontos: mudar um valor refaz o total na hora', (await pagina.textContent('.secao:has(h2:text("O que vale ponto")) .nota')).includes('Total do dia: 18 pontos'));
-  await pagina.getByRole('button', { name: '+ Adicionar item' }).first().click();
-  await pagina.locator('.linha-item').nth(3).locator('input[type=text]').fill('Bônus do dia');
-  await pagina.locator('.linha-item').nth(3).locator('input[type=number]').fill('2');
-  await pagina.getByRole('button', { name: 'Salvar itens do dia' }).click(); await pagina.waitForTimeout(250);
-  const it = salvos.find((x) => x.nome === 'admin_salvar_pontuacao_dia')?.corpo;
-  ok('pontos: salvar itens mantém os ids antigos, cria id do novo e manda pontos como número', it?.p_dia === 1 && it.p_itens.slice(0, 3).map((i) => i.id).join() === 'marca,ref,ideia' && it.p_itens[2].pontos === 8 && /^bonus_do_dia_[a-z0-9]{4}$/.test(it.p_itens[3].id) && it.p_itens[3].pontos === 2, JSON.stringify(it));
-  const antes = salvos.length;
-  await pagina.getByRole('button', { name: '+ Adicionar item' }).first().click();
-  await pagina.locator('.linha-item').last().locator('input[type=text]').fill('Sem pontos');
-  await pagina.getByRole('button', { name: 'Salvar itens do dia' }).click(); await pagina.waitForTimeout(200);
-  ok('pontos: item sem pontos não é enviado', salvos.length === antes && (await pagina.textContent('.aviso')).includes('pontos'));
-
-  // extra
-  await pagina.locator('.secao:has(h2:text("Ponto extra")) input[type=number]').fill('0');
-  await pagina.locator('.secao:has(h2:text("Ponto extra")) input[type=text]').fill('Ajudou');
-  const n0 = salvos.length;
-  await pagina.getByRole('button', { name: 'Lançar' }).click(); await pagina.waitForTimeout(150);
-  ok('pontos: extra de zero ponto é recusado antes de enviar', salvos.length === n0);
-  await pagina.locator('.secao:has(h2:text("Ponto extra")) input[type=number]').fill('-2');
-  await pagina.locator('.secao:has(h2:text("Ponto extra")) select').selectOption('p2');
-  await pagina.getByRole('button', { name: 'Lançar' }).click(); await pagina.waitForTimeout(250);
-  const ex = salvos.find((x) => x.nome === 'admin_lancar_extra')?.corpo;
-  ok('pontos: extra manda participante, motivo e pontos negativos como número', ex?.p_participante === 'p2' && ex.p_motivo === 'Ajudou' && ex.p_pontos === -2, JSON.stringify(ex));
-
-  // histórico
-  await pagina.locator('.secao:has(h2:text("Histórico")) select').selectOption('p1'); await pagina.waitForSelector('.hist-lista');
-  ok('pontos: histórico mostra válido e anulado, com total só do válido', (await pagina.locator('.hist-lista li').count()) === 2 && (await pagina.locator('.hist-lista .anulado').count()) === 1 && (await pagina.textContent('.historico .nota')).includes('Total válido: 5'));
-  ok('pontos: só o lançamento válido tem botão Anular', (await pagina.getByRole('button', { name: 'Anular' }).count()) === 1);
-  pagina.on('dialog', (d) => d.accept());
-  await pagina.getByRole('button', { name: 'Anular' }).click(); await pagina.waitForTimeout(250);
-  ok('pontos: anular chama a função com o id do lançamento', salvos.some((x) => x.nome === 'admin_anular_ponto' && x.corpo.p_id === 'h1'));
-  ok('pontos: sem erros no console', erros.length === 0, erros.join(' | '));
-  await pagina.context().close();
-}
-{
-  const { pagina } = await novaPagina({ admin: true, falhaLancar: true });
-  await pagina.goto(url('#/admin/pontos/1')); await pagina.waitForSelector('.pessoa-pontos');
-  const c = pagina.locator('.pessoa-pontos').nth(1).locator('[data-item="marca"]');
-  await c.check(); await pagina.waitForSelector('.aviso.erro:not([hidden])');
-  ok('pontos: se o servidor recusa, a marcação volta ao que era e avisa', !(await c.isChecked()) && (await pagina.locator('.pessoa-pontos').nth(1).locator('.total-dia').textContent()) === '0 pts');
-  await pagina.context().close();
-}
-{
-  const { pagina } = await novaPagina({ admin: true });
-  await pagina.goto(url('#/admin/pontos/1')); await pagina.waitForSelector('.pessoa-pontos');
-  await pagina.locator('select[aria-label="Dia"]').selectOption('3');
-  await pagina.waitForSelector('text=O que vale ponto no Dia 3');
-  ok('pontos: trocar o dia abre a tela daquele dia', pagina.url().endsWith('#/admin/pontos/3'));
-  await pagina.context().close();
-}
-{
-  const { pagina, salvos } = await novaPagina({ admin: true, ranking: { visivel: false, linhas: [{ apelido: 'Velha', pontos: 1 }] } });
-  await pagina.goto(url('#/admin/ranking')); await pagina.waitForSelector('text=Monte a lista');
-  pagina.on('dialog', (d) => d.accept());
-  await pagina.getByRole('button', { name: 'Calcular a partir dos pontos' }).click();
-  await pagina.waitForFunction(() => document.querySelectorAll('.linha-rank').length === 2);
-  ok('ranking: calcular preenche a lista com os pontos lançados', (await pagina.locator('.linha-rank input[type=text]').first().inputValue()) === 'Ana' && (await pagina.locator('.linha-rank input[type=number]').first().inputValue()) === '20');
-  ok('ranking: avisa quantas ficaram de fora por falta de apelido', (await pagina.textContent('.nota:has-text("Calculei")')).includes('2 participante(s) sem apelido'));
-  await pagina.getByRole('button', { name: 'Publicar ranking' }).click(); await pagina.waitForTimeout(250);
-  ok('ranking: publicar manda exatamente o que foi calculado', JSON.stringify(salvos.find((x) => x.nome === 'admin_publicar_ranking')?.corpo.p) === JSON.stringify([{ apelido: 'Ana', pontos: 20 }, { apelido: 'Bia', pontos: 7 }]));
-  await pagina.context().close();
-}
-{
-  const { pagina, pedidos } = await novaPagina({ admin: false });
-  await pagina.goto(url('#/admin/pontos')); await pagina.waitForSelector('.fechado');
-  ok('pontos: quem não é admin vê "Área restrita" e nada é pedido', (await pagina.textContent('.fechado')).includes('Área restrita') && !pedidos.some((p) => p.includes('pontuacao')));
+  ok('menina: #/cadastro volta para a lista', true);
   await pagina.context().close();
 }
 

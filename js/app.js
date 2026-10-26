@@ -2,7 +2,6 @@ import { diaMes, estaAberto, concluido } from './regras.js';
 import { h } from './dom.js';
 import { cabecaDoDia, corpoDoDia } from './dia-view.js';
 import { cartaoRanking } from './ranking-view.js';
-import { formularioCadastro } from './cadastro.js';
 
 const cfg = window.APOSTILA_CONFIG;
 const TOTAL = cfg.totalDias;
@@ -25,7 +24,7 @@ function lerErroDaUrl() {
 }
 let erroLogin = lerErroDaUrl();
 
-const estado = { sessao: null, ficha: false, config: null, agenda: [], conteudo: new Map(), marcados: new Map() };
+const estado = { sessao: null, config: null, agenda: [], conteudo: new Map(), marcados: new Map() };
 
 // ---------- helpers de tela (sempre textContent: nada do banco vira HTML) ----------
 const NS = 'http://www.w3.org/2000/svg';
@@ -86,16 +85,14 @@ function telaLogin() {
 
 // ---------- dados ----------
 async function carregarTudo() {
-  const [cfgR, agR, coR, prR, fiR] = await Promise.all([
+  const [cfgR, agR, coR, prR] = await Promise.all([
     db.from('config').select('*').eq('id', 1).maybeSingle(),
     db.from('dias_agenda').select('*').order('numero'),
     db.from('dias_conteudo').select('*'), // o servidor só devolve os dias já abertos
     db.from('progresso').select('dia,item,marcado'),
-    db.rpc('minha_ficha'),
   ]);
   const erro = [cfgR, agR, coR, prR].find((r) => r.error)?.error;
   if (erro) throw erro;
-  estado.ficha = fiR.error ? false : fiR.data;   // false = recurso indisponível; null = ainda sem ficha
   estado.config = cfgR.data ?? {};
   estado.agenda = agR.data;
   estado.conteudo = new Map(coR.data.map((c) => [c.numero, c]));
@@ -132,9 +129,7 @@ function telaLista() {
       : h('div', { class: 'dia-item', 'aria-disabled': 'true' }, corpo);
   });
   mostrar(
-    h('div', { class: 'topo' }, h('p', { class: 'marca' }, 'Bru Medeiros'),
-      h('span', {}, estado.ficha === false ? null : h('a', { class: 'btn-texto', href: '#/cadastro' }, 'Meu cadastro'), botaoSair())),
-    estado.ficha === null ? cartaoCadastro() : null,
+    h('div', { class: 'topo' }, h('p', { class: 'marca' }, 'Bru Medeiros'), botaoSair()),
     h('section', { class: 'card resumo' }, anel(feitos),
       h('div', {}, h('h1', {}, cfg.nomeDesafio), h('p', {}, feitos === 0 ? 'Vamos começar juntas?' : `${feitos} de ${TOTAL} dias concluídos.`))),
     estado.config?.ranking_visivel
@@ -142,21 +137,6 @@ function telaLista() {
       : null,
     h('nav', { class: 'card lista-dias', 'aria-label': 'Dias do desafio' }, itens),
   );
-}
-
-function cartaoCadastro() {
-  return h('section', { class: 'card cartao-cadastro' },
-    h('h2', {}, 'Complete seu cadastro'),
-    h('p', {}, 'Leva 30 segundos. Assim a Bruna sabe quem é você.'),
-    formularioCadastro({ db, avisar, ficha: null, rotulo: 'Salvar meu cadastro', aoSalvar: (f) => { estado.ficha = f; telaLista(); } }));
-}
-
-function telaCadastro() {
-  if (estado.ficha === false) return telaLista();
-  mostrar(
-    h('a', { class: 'btn-texto voltar', href: '#/' }, '← Todos os dias'),
-    h('h1', { class: 'titulo-admin' }, 'Meu cadastro'),
-    h('section', { class: 'card' }, formularioCadastro({ db, avisar, ficha: estado.ficha, rotulo: 'Salvar', aoSalvar: (f) => { estado.ficha = f; location.hash = '#/'; } })));
 }
 
 function botaoSair() {
@@ -226,7 +206,6 @@ function rotear() {
   }
   if (!estado.sessao) return telaLogin();
   if (location.hash === '#/ranking') return telaRanking();
-  if (location.hash === '#/cadastro') return telaCadastro();
   const m = location.hash.match(/^#\/dia\/(\d+)$/);
   return m ? telaDia(Number(m[1])) : telaLista();
 }

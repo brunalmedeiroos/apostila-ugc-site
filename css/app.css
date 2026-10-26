@@ -269,46 +269,6 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue-dark); }
 @media (min-width: 560px) {
   .linha-rank { grid-template-columns: 3em 1fr 7em auto; grid-template-areas: "pos nome pts rem"; }
 }
-
-/* ---------- Participantes (admin) ---------- */
-.lista-fichas { padding: 8px 12px; margin-top: 16px; }
-.ficha + .ficha { border-top: 1px solid var(--linha); }
-.ficha > summary { display: flex; align-items: center; gap: 14px; min-height: 60px; padding: 10px 4px; cursor: pointer; list-style: none; }
-.ficha > summary::-webkit-details-marker { display: none; }
-.ficha[open] > summary { border-bottom: 1px solid var(--linha); margin-bottom: 8px; }
-.ficha-form { padding: 4px 4px 16px; }
-.ficha-form .acoes { margin-top: 16px; }
-select { width: 100%; font: inherit; color: var(--ink); background: var(--white); border: 2px solid var(--linha); border-radius: 12px; padding: 12px 14px; min-height: 48px; }
-select:focus { outline: none; border-color: var(--blue-dark); }
-
-/* ---------- Meu cadastro ---------- */
-.cartao-cadastro { margin-bottom: 16px; }
-.cartao-cadastro h2 { margin-bottom: 4px; }
-.cartao-cadastro > p { margin-bottom: 4px; }
-.cadastro-form .btn { margin-top: 18px; }
-.topo > span { display: flex; align-items: center; gap: 8px; }
-.ficha-ligar { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--linha); }
-.ficha-ligar .btn { margin-top: 12px; width: 100%; }
-
-/* ---------- Pontos (admin) ---------- */
-/* celular: o texto do item na largura toda; pontos e "Remover" embaixo */
-.linha-item { grid-template-columns: 1fr auto; grid-template-areas: "texto texto" "pts rem"; align-items: center; column-gap: 10px; }
-.linha-item > :nth-child(1) { grid-area: texto; }
-.linha-item > :nth-child(2) { grid-area: pts; max-width: 8em; }
-.linha-item > :nth-child(3) { grid-area: rem; justify-self: end; }
-@media (min-width: 560px) {
-  .linha-item { grid-template-columns: 1fr 7em auto; grid-template-areas: "texto pts rem"; }
-}
-.titulo-admin + .campo { margin-bottom: 16px; }
-.pessoa-pontos { padding: 12px 0; border-top: 1px solid var(--linha); }
-.pessoa-pontos:first-child { border-top: none; padding-top: 0; }
-.pessoa-topo { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
-.pessoa-topo .total-dia { margin-left: auto; font-weight: 700; color: var(--blue-dark); }
-.pessoa-topo .nota { margin: 0; }
-.mini-check { min-height: 44px; padding: 6px 0; }
-.hist-lista { list-style: none; }
-.hist-lista li { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--linha); }
-.hist-lista li:first-child { border-top: none; }
-.hist-lista .anulado { color: var(--blue-dark); text-decoration: line-through; }
-.hist-texto { flex: 1; min-width: 0; word-break: break-word; }
-.hist-pts { flex: none; font-weight: 700; color: var(--blue-dark); }
+.painel-card { margin-bottom: 16px; }
+.painel-card p { margin-bottom: 14px; }
+.painel-card .btn { width: 100%; }
