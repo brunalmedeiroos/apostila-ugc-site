@@ -20,6 +20,7 @@ export async function abrirAdmin({ db, mostrar, avisar, rota }) {
   if (e1) return mostrar(h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, e1.message)));
 
   if (rota === '#/admin/ranking') return telaRanking({ db, mostrar, avisar });
+  if (rota === '#/admin/participantes') return telaParticipantes({ db, mostrar, avisar });
   const m = rota.match(/^#\/admin\/dia\/(\d+)$/);
   if (m) {
     const dia = dias.find((d) => d.numero === Number(m[1]));
@@ -54,6 +55,7 @@ function telaLista({ db, mostrar, avisar, dias, config }) {
     h('section', { class: 'card secao' }, h('h2', {}, 'Grupo'),
       h('label', { class: 'campo', for: 'cfg-link' }, h('span', {}, 'Link do grupo'), link),
       h('label', { class: 'campo', for: 'cfg-insta' }, h('span', {}, '@ do Instagram'), insta), salvar),
+    h('a', { class: 'card ranking-link', href: '#/admin/participantes' }, h('span', { class: 'dia-titulo' }, 'Participantes'), h('span', { class: 'dia-lado' }, 'Fichas e progresso')),
     h('a', { class: 'card ranking-link', href: '#/admin/ranking' }, h('span', { class: 'dia-titulo' }, 'Ranking'), h('span', { class: 'dia-lado' }, 'Editar e publicar')),
     h('nav', { class: 'card lista-dias', 'aria-label': 'Dias' }, linhas));
 }
@@ -255,4 +257,74 @@ async function telaRanking({ db, mostrar, avisar }) {
       h('p', { class: 'nota' }, data.atualizado_em ? `Última publicação: ${dataHoraFortaleza(data.atualizado_em)} (horário de Fortaleza).` : 'Ainda não foi publicado.'),
       h('div', { class: 'acoes' }, publicar)),
     h('h2', { class: 'titulo-admin' }, 'Como as meninas veem'), previa);
+}
+
+// ---------- participantes ----------
+const SITUACOES = [['ativa', 'Ativa'], ['pausada', 'Pausada'], ['saiu', 'Saiu']];
+
+async function telaParticipantes({ db, mostrar, avisar }) {
+  const [lista, dias] = await Promise.all([db.rpc('admin_participantes'), db.rpc('admin_dias')]);
+  if (lista.error) return mostrar(h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, lista.error.message)));
+  const prontos = (dias.data ?? []).filter((d) => !d.em_breve).length;
+  const pessoas = lista.data;
+  const semFicha = pessoas.filter((x) => !x.id).length;
+  const recarregar = () => telaParticipantes({ db, mostrar, avisar });
+
+  // Formulário de uma ficha. `x` = linha da lista (ou {} para uma pessoa nova que ainda não entrou).
+  const formulario = (x) => {
+    const nome = h('input', { type: 'text', value: x.nome ?? (x.email ? x.email.split('@')[0] : ''), maxlength: 120 });
+    const apelido = h('input', { type: 'text', value: x.apelido ?? '', maxlength: 60 });
+    const insta = h('input', { type: 'text', value: x.instagram ?? '', maxlength: 60, placeholder: '@usuario' });
+    const situacao = h('select', {}, SITUACOES.map(([v, t]) => h('option', { value: v }, t)));
+    situacao.value = x.status ?? 'ativa';
+    const obs = h('textarea', { rows: 3, value: x.observacoes ?? '', maxlength: 2000 });
+    const salvar = h('button', { class: 'btn btn-primario', type: 'button' }, x.id ? 'Salvar ficha' : 'Criar ficha');
+    salvar.addEventListener('click', async () => {
+      if (!nome.value.trim()) return avisar('A ficha precisa de um nome.', true);
+      salvar.disabled = true;
+      const { error } = await db.rpc('admin_salvar_participante', { p: {
+        id: x.id ?? null, user_id: x.user_id ?? null, nome: nome.value, apelido: apelido.value, instagram: insta.value,
+        status: situacao.value, observacoes: obs.value } });
+      salvar.disabled = false;
+      if (error) return avisar(`Não salvou: ${error.message}`, true);
+      avisar('Ficha salva.');
+      recarregar();
+    });
+    const apagar = x.id ? h('button', { class: 'btn-texto', type: 'button' }, 'Apagar ficha') : null;
+    apagar?.addEventListener('click', async () => {
+      if (!confirm(`Apagar a ficha de ${x.nome}? Ela continua podendo entrar na apostila.`)) return;
+      const { error } = await db.rpc('admin_apagar_participante', { p_id: x.id });
+      if (error) return avisar(`Não apagou: ${error.message}`, true);
+      avisar('Ficha apagada.');
+      recarregar();
+    });
+    const campo = (rotulo, el, dica) => h('label', { class: 'campo' }, h('span', {}, rotulo), el, dica ? h('small', {}, dica) : null);
+    return h('div', { class: 'ficha-form' },
+      x.email ? h('p', { class: 'nota' }, `E-mail: ${x.email}`) : h('p', { class: 'nota' }, 'Ainda não entrou na apostila.'),
+      x.entrou_em ? h('p', { class: 'nota' }, `Entrou em ${dataHoraFortaleza(x.entrou_em)}${x.ultimo_acesso ? `. Último acesso: ${dataHoraFortaleza(x.ultimo_acesso)}` : ''}.`) : null,
+      campo('Nome', nome), campo('Apelido (o que aparece no ranking)', apelido, 'Deixe vazio para ela não aparecer no ranking.'),
+      campo('Instagram', insta), campo('Situação', situacao), campo('Observações (só você vê)', obs),
+      h('div', { class: 'acoes' }, salvar, apagar));
+  };
+
+  const linha = (x) => {
+    const titulo = x.nome ?? x.email?.split('@')[0] ?? 'Sem nome';
+    const andamento = x.user_id ? `${x.dias_concluidos}/${prontos} dias` : 'não entrou';
+    return h('details', { class: 'ficha' },
+      h('summary', {},
+        h('span', { class: 'dia-texto' },
+          h('span', { class: 'dia-titulo' }, titulo),
+          h('span', { class: 'dia-num' }, [!x.id ? 'sem ficha' : x.apelido ? `apelido: ${x.apelido}` : 'sem apelido', x.status !== 'ativa' ? x.status : null].filter(Boolean).join(' · '))),
+        h('span', { class: 'dia-lado' }, andamento)),
+      formulario(x));
+  };
+
+  const nova = h('details', { class: 'ficha' }, h('summary', {}, h('span', { class: 'dia-titulo' }, '+ Cadastrar quem ainda não entrou')), formulario({}));
+
+  mostrar(
+    h('a', { class: 'btn-texto voltar', href: '#/admin' }, '← Admin'),
+    h('h1', { class: 'titulo-admin' }, 'Participantes'),
+    h('p', { class: 'nota' }, `${pessoas.filter((x) => x.user_id).length} entraram na apostila${semFicha ? `, ${semFicha} ainda sem ficha` : ''}. "Dias" conta quem concluiu todos os itens obrigatórios do checklist. Hoje há ${prontos} ${prontos === 1 ? 'dia pronto' : 'dias prontos'}.`),
+    h('div', { class: 'card lista-fichas' }, pessoas.length ? pessoas.map(linha) : h('p', {}, 'Ninguém entrou ainda.')),
+    h('div', { class: 'card lista-fichas' }, nova));
 }

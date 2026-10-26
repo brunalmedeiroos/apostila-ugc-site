@@ -19,7 +19,7 @@ const abertos = new Set(agenda.filter((a) => a.libera_em && new Date(a.libera_em
 const server = await servir();
 const browser = await chromium.launch();
 
-async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null } = {}) {
+async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null, participantes = [] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Fortaleza' });
   const pagina = await ctx.newPage();
   const progresso = [...progressoInicial];
@@ -34,6 +34,7 @@ async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = 
       if (nome === 'is_admin') return json(admin);
       if (!admin) return json({ message: 'sem acesso', code: '42501' }, 403);
       if (nome === 'admin_dias') return json(agenda.map((a) => { const c = fixtures.conteudo.find((x) => x.numero === a.numero); return { ...a, ...c, documento: c.documento ?? null, video_id: (a.numero === 1 ? videoDia1 : null) }; }));
+      if (nome === 'admin_participantes') return json(participantes);
       if (nome === 'admin_ranking') return json({ visivel: Boolean(ranking?.visivel), atualizado_em: ranking ? '2026-10-26T17:30:00+00:00' : null, linhas: ranking?.linhas ?? [] });
       salvos.push({ nome, corpo }); return route.fulfill({ status: 204, body: '' });
     }
@@ -328,7 +329,7 @@ const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { a
 {
   const { pagina, salvos } = await novaPagina({ admin: true, ranking: { visivel: false, linhas: [{ apelido: 'Velha', pontos: 1 }] } });
   await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
-  await pagina.locator('.ranking-link').click(); await pagina.waitForSelector('text=Cole o ranking');
+  await pagina.locator('.ranking-link:has-text("Ranking")').click(); await pagina.waitForSelector('text=Cole o ranking');
   ok('admin ranking: abre com a lista já publicada', (await pagina.locator('.linha-rank').count()) === 1);
   pagina.on('dialog', (d) => d.accept());
   await pagina.locator('textarea').fill('Lu 40\nBia - 40\n1. Ana 20 pts\nlinha sem número');
@@ -350,6 +351,67 @@ const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { a
   const n = salvos.length;
   await pagina.getByRole('button', { name: 'Publicar ranking' }).click(); await pagina.waitForTimeout(200);
   ok('admin ranking: apelido vazio não é enviado', salvos.length === n && (await pagina.textContent('.aviso')).includes('linha 1'));
+  await pagina.context().close();
+}
+
+// ---- 12. Admin: participantes ----
+const PESSOAS = [
+  { id: null, user_id: 'u1', email: 'caro@teste.com', entrou_em: '2026-10-26T12:00:00+00:00', ultimo_acesso: null, nome: null, apelido: null, instagram: null, status: 'ativa', observacoes: null, dias_concluidos: 0 },
+  { id: 'f2', user_id: 'u2', email: 'bia@teste.com', entrou_em: '2026-10-25T12:00:00+00:00', ultimo_acesso: '2026-10-26T15:30:00+00:00', nome: 'Beatriz', apelido: 'Bia', instagram: '@bia', status: 'ativa', observacoes: 'vem do Painel', dias_concluidos: 1 },
+  { id: 'f3', user_id: null, email: null, entrou_em: null, ultimo_acesso: null, nome: 'Lu', apelido: null, instagram: null, status: 'pausada', observacoes: null, dias_concluidos: 0 },
+];
+{
+  const { pagina, salvos, erros } = await novaPagina({ admin: true, participantes: PESSOAS });
+  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
+  await pagina.locator('.ranking-link:has-text("Participantes")').click(); await pagina.waitForSelector('text=entraram na apostila');
+  const fichas = pagina.locator('.lista-fichas').first().locator('.ficha');
+  ok('participantes: lista as 3 pessoas', (await fichas.count()) === 3);
+  const resumos = await fichas.locator('summary').allTextContents();
+  ok('participantes: login sem ficha aparece como "sem ficha" e mostra o nome pelo e-mail', resumos[0].includes('caro') && resumos[0].includes('sem ficha'), resumos[0]);
+  ok('participantes: mostra o progresso (1 de 1 dia pronto) e quem ainda não entrou', resumos[1].includes('1/1 dias') && resumos[2].includes('não entrou') && resumos[2].includes('pausada'), JSON.stringify(resumos));
+  ok('participantes: resumo conta quem entrou e quem está sem ficha', (await pagina.textContent('p.nota')).includes('2 entraram na apostila, 1 ainda sem ficha'));
+
+  await fichas.nth(0).locator('summary').click();
+  ok('participantes: o nome vem sugerido do e-mail', (await fichas.nth(0).locator('input[type=text]').first().inputValue()) === 'caro');
+  await fichas.nth(0).locator('input[type=text]').first().fill('Carolina');
+  await fichas.nth(0).locator('input[type=text]').nth(1).fill('Caro');
+  await fichas.nth(0).getByRole('button', { name: 'Criar ficha' }).click(); await pagina.waitForTimeout(250);
+  const criar = salvos.find((x) => x.nome === 'admin_salvar_participante')?.corpo.p;
+  ok('participantes: criar ficha liga ao login certo', criar?.user_id === 'u1' && criar.id === null && criar.nome === 'Carolina' && criar.apelido === 'Caro', JSON.stringify(criar));
+
+  await pagina.waitForSelector('.lista-fichas .ficha');
+  await pagina.locator('.lista-fichas').first().locator('.ficha').nth(1).locator('summary').click();
+  const f2 = pagina.locator('.lista-fichas').first().locator('.ficha').nth(1);
+  await f2.locator('select').selectOption('saiu');
+  await f2.locator('input[type=text]').nth(1).fill('Bi');
+  await f2.getByRole('button', { name: 'Salvar ficha' }).click(); await pagina.waitForTimeout(250);
+  const edit = salvos.filter((x) => x.nome === 'admin_salvar_participante').at(-1).corpo.p;
+  ok('participantes: editar envia o id da ficha, a situação e o novo apelido', edit.id === 'f2' && edit.status === 'saiu' && edit.apelido === 'Bi' && edit.observacoes === 'vem do Painel', JSON.stringify(edit));
+
+  const antes = salvos.length;
+  await pagina.locator('.lista-fichas').first().locator('.ficha').nth(2).locator('summary').click();
+  const f3 = pagina.locator('.lista-fichas').first().locator('.ficha').nth(2);
+  await f3.locator('input[type=text]').first().fill('');
+  await f3.getByRole('button', { name: 'Salvar ficha' }).click(); await pagina.waitForTimeout(200);
+  ok('participantes: ficha sem nome não é enviada', salvos.length === antes && (await pagina.textContent('.aviso')).includes('nome'));
+
+  pagina.on('dialog', (d) => d.accept());
+  await f3.getByRole('button', { name: 'Apagar ficha' }).click(); await pagina.waitForTimeout(250);
+  ok('participantes: apagar ficha chama a função com o id', salvos.some((x) => x.nome === 'admin_apagar_participante' && x.corpo.p_id === 'f3'));
+
+  await pagina.locator('.lista-fichas').nth(1).locator('summary').click();
+  await pagina.locator('.lista-fichas').nth(1).locator('input[type=text]').first().fill('Nova Pessoa');
+  await pagina.locator('.lista-fichas').nth(1).getByRole('button', { name: 'Criar ficha' }).click(); await pagina.waitForTimeout(250);
+  const nova = salvos.filter((x) => x.nome === 'admin_salvar_participante').at(-1).corpo.p;
+  ok('participantes: cadastrar quem ainda não entrou (sem login)', nova.nome === 'Nova Pessoa' && nova.user_id === null && nova.id === null, JSON.stringify(nova));
+  ok('participantes: sem erros no console', erros.length === 0, erros.join(' | '));
+  await foto(pagina, '12-participantes');
+  await pagina.context().close();
+}
+{
+  const { pagina, pedidos } = await novaPagina({ admin: false, participantes: PESSOAS });
+  await pagina.goto(url('#/admin/participantes')); await pagina.waitForSelector('.fechado');
+  ok('participantes: quem não é admin vê "Área restrita" e nada é pedido', (await pagina.textContent('.fechado')).includes('Área restrita') && !pedidos.some((p) => p.includes('admin_participantes')));
   await pagina.context().close();
 }
 
