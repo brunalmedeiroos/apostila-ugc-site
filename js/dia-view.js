@@ -4,6 +4,9 @@ import { h } from './dom.js';
 import { linkSeguro, textoPrazoStory } from './regras.js';
 import { renderizarDocumento } from './documento.js';
 
+// Texto livre da Bruna (aprender, tarefa, enviar): mesma formatação do documento.
+const texto = (valor) => h('div', { class: 'documento' }, renderizarDocumento(valor ?? ''));
+
 export function secao(titulo, ...conteudo) {
   return h('section', { class: 'card secao' }, h('h2', {}, titulo), ...conteudo);
 }
@@ -23,7 +26,7 @@ export function secaoEnviar(c, dia, config) {
   const url = config?.link_grupo ? linkSeguro(config.link_grupo) : null;
   const insta = config?.instagram || '@brunalmedeiroos';
   return secao('O que enviar no grupo',
-    h('p', {}, c.enviar),
+    texto(c.enviar),
     url
       ? h('a', { class: 'btn btn-primario', href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o grupo')
       : h('span', { class: 'btn', 'aria-disabled': 'true' }, 'Link do grupo em breve'),
@@ -49,8 +52,8 @@ export const cabecaDoDia = (n, titulo, total) =>
 
 // As seções do dia, na ordem. `c` é o conteúdo; `dia` tem titulo e libera_em.
 export function corpoDoDia(c, dia, config, marcados, aoMarcar) {
-  const tarefa = secao('Tarefa do dia', h('p', {}, c.tarefa ?? 'Em breve.'));
+  const tarefa = secao('Tarefa do dia', texto(c.tarefa ?? 'Em breve.'));
   return c.em_breve
     ? [tarefa, secao('Conteúdo em breve', h('p', {}, 'O resto deste dia ainda não está pronto. Volte aqui em breve.'))]
-    : [secao('O que você vai aprender hoje', h('p', {}, c.aprender)), secaoEstude(c), tarefa, secaoEnviar(c, dia, config), secaoChecklist(c, marcados, aoMarcar)];
+    : [secao('O que você vai aprender hoje', texto(c.aprender)), secaoEstude(c), tarefa, secaoEnviar(c, dia, config), secaoChecklist(c, marcados, aoMarcar)];
 }

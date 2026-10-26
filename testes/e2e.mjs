@@ -19,7 +19,7 @@ const abertos = new Set(agenda.filter((a) => a.libera_em && new Date(a.libera_em
 const server = await servir();
 const browser = await chromium.launch();
 
-async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null } = {}) {
+async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Fortaleza' });
   const pagina = await ctx.newPage();
   const progresso = [...progressoInicial];
@@ -41,7 +41,7 @@ async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = 
     if (req.method() === 'GET') {
       if (tabela === 'config') return json(fixtures.config);
       if (tabela === 'dias_agenda') return json(agenda);
-      if (tabela === 'dias_conteudo') return json(fixtures.conteudo.filter((c) => abertos.has(c.numero)).map((c) => (c.numero === 1 && documentoDia1 ? { ...c, documento: documentoDia1 } : c)));
+      if (tabela === 'dias_conteudo') return json(fixtures.conteudo.filter((c) => abertos.has(c.numero)).map((c) => (c.numero === 1 ? { ...c, ...(documentoDia1 ? { documento: documentoDia1 } : {}), ...(enviarDia1 ? { enviar: enviarDia1 } : {}) } : c)));
       if (tabela === 'progresso') return json(progresso);
     }
     if (req.method() === 'POST' && tabela === 'progresso') {
@@ -183,9 +183,24 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   ok('documento: título e lista aparecem', (await pagina.textContent('.documento h3')) === 'Meu título' && (await pagina.locator('.documento li').count()) === 2 && (await pagina.locator('.documento li strong').count()) === 1);
   ok('documento: link bom abre em outra aba com noopener', (await pagina.getAttribute('.documento a[href="https://exemplo.com/x"]', 'rel')) === 'noopener noreferrer');
   ok('documento: link javascript: NÃO vira link', (await pagina.locator('.documento a[href^="javascript"]').count()) === 0);
-  ok('documento: <script> e <img onerror> aparecem como texto e não executam', (await pagina.evaluate(() => window.__xss)) === undefined && (await pagina.textContent('.documento')).includes('<script>') && (await pagina.locator('.documento img, .documento script').count()) === 0);
+  ok('documento: <script> e <img onerror> aparecem como texto e não executam', (await pagina.evaluate(() => window.__xss)) === undefined && (await pagina.locator('section:has(h2:text("Estude")) .documento').textContent()).includes('<script>') && (await pagina.locator('.documento img, .documento script').count()) === 0);
   ok('documento: sem erros no console', erros.length === 0, erros.join(' | '));
   await foto(pagina, '7-documento');
+  await pagina.context().close();
+}
+
+// ---- 7b. Textos livres (enviar/tarefa/aprender) também são formatados ----
+{
+  const enviar = 'Para concluir sua missão:\n- **A marca:** nome ou @\n- **Sua ideia:** uma frase\n\n**Vale até 20 pontos!** Não precisa gravar.\nSegunda linha <b>x</b>';
+  const { pagina, erros } = await novaPagina({ enviarDia1: enviar });
+  await pagina.goto(url('#/dia/1')); await pagina.waitForSelector('.pontos');
+  const secaoEnviar = pagina.locator('section:has(h2:text("O que enviar no grupo")) .documento');
+  ok('texto livre: a lista vira lista de verdade (2 itens)', (await secaoEnviar.locator('li').count()) === 2);
+  ok('texto livre: **negrito** destacado, sem asteriscos na tela', (await secaoEnviar.locator('strong').count()) === 3 && !(await secaoEnviar.textContent()).includes('**'));
+  ok('texto livre: parágrafo novo e quebra de linha simples', (await secaoEnviar.locator('p').count()) === 2 && (await secaoEnviar.locator('p br').count()) === 1);
+  ok('texto livre: HTML digitado continua sendo só texto', (await secaoEnviar.locator('b').count()) === 0 && (await secaoEnviar.textContent()).includes('<b>x</b>'));
+  ok('texto livre: sem erros no console', erros.length === 0, erros.join(' | '));
+  await foto(pagina, '7b-texto-livre');
   await pagina.context().close();
 }
 

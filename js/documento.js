@@ -2,6 +2,7 @@
 // então nada que for digitado vira código. Links só http(s).
 //
 //   ## Título       ### Subtítulo      - item      1. item      > destaque      ---
+//   Uma linha em branco separa parágrafos; uma quebra simples vira quebra de linha.
 //   **negrito**   *itálico*   [texto](https://link)
 import { linkSeguro } from './regras.js';
 
@@ -30,7 +31,10 @@ export function parseDocumento(texto) {
   const blocos = [];
   let par = [];
   let lista = null;
-  const fechaPar = () => { if (par.length) blocos.push({ tipo: 'p', f: parseInline(par.join(' ')) }); par = []; };
+  const fechaPar = () => {
+    if (par.length) blocos.push({ tipo: 'p', f: par.flatMap((linha, i) => (i ? [{ t: 'br' }, ...parseInline(linha)] : parseInline(linha))) });
+    par = [];
+  };
   const fechaLista = () => { if (lista) blocos.push(lista); lista = null; };
 
   for (const bruta of linhas) {
@@ -65,6 +69,7 @@ export function renderizarDocumento(texto, doc = document) {
   const el = (tag, filhos = []) => { const e = doc.createElement(tag); e.append(...filhos); return e; };
   const inline = (nos) => nos.map((n) => {
     if (n.t === 'texto') return doc.createTextNode(n.v);
+    if (n.t === 'br') return doc.createElement('br');
     if (n.t === 'a') { const a = el('a', inline(n.f)); a.href = n.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; }
     return el(n.t === 'b' ? 'strong' : 'em', inline(n.f));
   });

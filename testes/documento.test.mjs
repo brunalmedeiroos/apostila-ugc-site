@@ -5,7 +5,8 @@ import { parseDocumento, parseInline } from '../js/documento.js';
 test('títulos, parágrafos e listas', () => {
   const b = parseDocumento('## Oi\n\nLinha um\nlinha dois\n\n- a\n- b\n\n1. x\n2. y\n\n> destaque\n\n---');
   assert.deepEqual(b.map((x) => x.tipo), ['h', 'p', 'ul', 'ol', 'q', 'hr']);
-  assert.equal(b[1].f[0].v, 'Linha um linha dois');
+  assert.deepEqual(b[1].f.map((x) => x.t), ['texto', 'br', 'texto']);
+  assert.equal(b[1].f[2].v, 'linha dois');
   assert.equal(b[2].itens.length, 2);
 });
 test('negrito, itálico e link', () => {
@@ -34,4 +35,12 @@ test('texto vazio ou nulo não quebra', () => {
 });
 test('marcação aberta sem fechar fica como texto', () => {
   assert.equal(parseInline('**sem fechar').map((x) => x.v ?? '').join(''), '**sem fechar');
+});
+
+test('texto estilo conversa: parágrafo, lista com negrito e quebra simples', () => {
+  const b = parseDocumento('Para concluir:\n- **A marca:** nome\n- **Uma ideia:** frase\n\n**Vale até 20 pontos!** Sem gravar.\nSegunda linha');
+  assert.deepEqual(b.map((x) => x.tipo), ['p', 'ul', 'p']);
+  assert.equal(b[1].itens.length, 2);
+  assert.equal(b[1].itens[0][0].t, 'b');
+  assert.deepEqual(b[2].f.map((x) => x.t), ['b', 'texto', 'br', 'texto']);
 });
