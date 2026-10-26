@@ -19,7 +19,7 @@ const abertos = new Set(agenda.filter((a) => a.libera_em && new Date(a.libera_em
 const server = await servir();
 const browser = await chromium.launch();
 
-async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null } = {}) {
+async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Fortaleza' });
   const pagina = await ctx.newPage();
   const progresso = [...progressoInicial];
@@ -33,15 +33,17 @@ async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = 
       const nome = u.pathname.split('/').pop(); const corpo = req.postData() ? JSON.parse(req.postData()) : {};
       if (nome === 'is_admin') return json(admin);
       if (!admin) return json({ message: 'sem acesso', code: '42501' }, 403);
-      if (nome === 'admin_dias') return json(agenda.map((a) => { const c = fixtures.conteudo.find((x) => x.numero === a.numero); return { ...a, ...c, documento: c.documento ?? null }; }));
+      if (nome === 'admin_dias') return json(agenda.map((a) => { const c = fixtures.conteudo.find((x) => x.numero === a.numero); return { ...a, ...c, documento: c.documento ?? null, video_id: (a.numero === 1 ? videoDia1 : null) }; }));
+      if (nome === 'admin_ranking') return json({ visivel: Boolean(ranking?.visivel), atualizado_em: ranking ? '2026-10-26T17:30:00+00:00' : null, linhas: ranking?.linhas ?? [] });
       salvos.push({ nome, corpo }); return route.fulfill({ status: 204, body: '' });
     }
     if (!u.pathname.startsWith('/rest/v1/')) return json({});
     const tabela = u.pathname.split('/').pop();
     if (req.method() === 'GET') {
-      if (tabela === 'config') return json(fixtures.config);
+      if (tabela === 'config') return json({ ...fixtures.config, ranking_visivel: Boolean(ranking?.visivel), ranking_atualizado_em: ranking ? '2026-10-26T17:30:00+00:00' : null });
+      if (tabela === 'ranking') return json(ranking?.visivel ? ranking.linhas.map((l, i) => ({ ...l, ordem: i + 1 })) : []);
       if (tabela === 'dias_agenda') return json(agenda);
-      if (tabela === 'dias_conteudo') return json(fixtures.conteudo.filter((c) => abertos.has(c.numero)).map((c) => (c.numero === 1 ? { ...c, ...(documentoDia1 ? { documento: documentoDia1 } : {}), ...(enviarDia1 ? { enviar: enviarDia1 } : {}) } : c)));
+      if (tabela === 'dias_conteudo') return json(fixtures.conteudo.filter((c) => abertos.has(c.numero)).map((c) => (c.numero === 1 ? { ...c, ...(documentoDia1 ? { documento: documentoDia1 } : {}), ...(enviarDia1 ? { enviar: enviarDia1 } : {}), ...(videoDia1 ? { video_id: videoDia1 } : {}) } : c)));
       if (tabela === 'progresso') return json(progresso);
     }
     if (req.method() === 'POST' && tabela === 'progresso') {
@@ -255,6 +257,99 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   const { pagina } = await novaPagina({ logada: false });
   await pagina.goto(url('#/admin')); await pagina.waitForSelector('.login');
   ok('admin: sem login mostra a tela de login', await pagina.getByRole('button', { name: 'Entrar com Google' }).isVisible());
+  await pagina.context().close();
+}
+
+// ---- 9. Vídeo do dia ----
+{
+  const { pagina, erros } = await novaPagina({ videoDia1: 'dQw4w9WgXcQ' });
+  await pagina.goto(url('#/dia/1')); await pagina.waitForSelector('.video iframe', { state: 'attached' });
+  const f = pagina.locator('.video iframe');
+  ok('vídeo: player do YouTube em modo de privacidade, com o código certo', (await f.getAttribute('src')) === 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
+  ok('vídeo: player isolado (sandbox) e com texto "Prefere ouvir?"', (await f.getAttribute('sandbox')).includes('allow-scripts') && !(await f.getAttribute('sandbox')).includes('allow-top-navigation') && (await pagina.textContent('.prefere')).includes('Prefere ouvir'));
+  ok('vídeo: fica dentro da seção "Estude"', (await pagina.locator('section:has(h2:text("Estude")) .video').count()) === 1);
+  await foto(pagina, '9-video');
+  await pagina.context().close();
+}
+{
+  const { pagina } = await novaPagina({});
+  await pagina.goto(url('#/dia/1')); await pagina.waitForSelector('.cabeca-dia');
+  ok('vídeo: sem vídeo cadastrado, nenhum player aparece', (await pagina.locator('iframe').count()) === 0);
+  await pagina.context().close();
+}
+{
+  // código de vídeo malformado vindo do banco nunca vira iframe
+  const { pagina } = await novaPagina({ videoDia1: '"><script>x</script>' });
+  await pagina.goto(url('#/dia/1')); await pagina.waitForSelector('.cabeca-dia');
+  ok('vídeo: código inválido vindo do banco é ignorado', (await pagina.locator('iframe').count()) === 0);
+  await pagina.context().close();
+}
+
+// ---- 10. Ranking para as meninas ----
+const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { apelido: 'Ana', pontos: 20 }, { apelido: '<b>Zé</b>', pontos: 35 }];
+{
+  const { pagina } = await novaPagina({ ranking: { visivel: false, linhas: RANK } });
+  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
+  ok('ranking oculto: nenhum atalho na lista', (await pagina.locator('.ranking-link').count()) === 0);
+  await pagina.goto(url('#/ranking')); await pagina.waitForSelector('.fechado');
+  ok('ranking oculto: abrir pela URL mostra "ainda não abriu" e nenhuma linha', (await pagina.textContent('.fechado')).includes('ainda não abriu') && (await pagina.locator('.rank-item').count()) === 0);
+  await pagina.context().close();
+}
+{
+  const { pagina, erros } = await novaPagina({ ranking: { visivel: true, linhas: RANK } });
+  await pagina.goto(url()); await pagina.waitForSelector('.ranking-link');
+  await pagina.locator('.ranking-link').click(); await pagina.waitForSelector('.rank-item');
+  const itens = await pagina.locator('.rank-item').allTextContents();
+  ok('ranking visível: ordem por pontos, empate divide a posição', JSON.stringify(itens) === JSON.stringify(['1ºLu40 pts', '1ºBia40 pts', '3º<b>Zé</b>35 pts', '4ºAna20 pts']), JSON.stringify(itens));
+  ok('ranking visível: HTML no apelido aparece como texto', (await pagina.locator('.rank-lista b').count()) === 0);
+  ok('ranking visível: mostra quando foi atualizado em Fortaleza', (await pagina.textContent('.rank-quando')).includes('26/10 às 14:30'));
+  ok('ranking visível: sem erros no console', erros.length === 0, erros.join(' | '));
+  await foto(pagina, '10-ranking');
+  await pagina.context().close();
+}
+
+// ---- 11. Admin: vídeo e ranking ----
+{
+  const { pagina, salvos } = await novaPagina({ admin: true, videoDia1: 'dQw4w9WgXcQ' });
+  await pagina.goto(url('#/admin/dia/1')); await pagina.waitForSelector('text=Checklist final');
+  ok('admin vídeo: mostra o vídeo atual como link', (await pagina.locator('input[type=url]').first().inputValue()) === 'https://youtu.be/dQw4w9WgXcQ');
+  await pagina.locator('input[placeholder^="https://youtu.be"]').fill('https://www.youtube.com/watch?v=abcDEF12345&t=5');
+  ok('admin vídeo: avisa que reconheceu o link', (await pagina.textContent('label:has-text("Vídeo do dia") small')).includes('reconhecido'));
+  await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(250);
+  ok('admin vídeo: salva só o código do vídeo', salvos.find((x) => x.nome === 'admin_salvar_dia')?.corpo.p.video_id === 'abcDEF12345', JSON.stringify(salvos));
+  await pagina.goto(url('#/admin/dia/1')); await pagina.waitForSelector('text=Checklist final');
+  await pagina.locator('input[placeholder^="https://youtu.be"]').fill('https://youtube.com.golpe.com/watch?v=abcDEF12345');
+  ok('admin vídeo: link falso avisa que não reconheceu', (await pagina.textContent('label:has-text("Vídeo do dia") small')).includes('Não reconheci'));
+  const antes = salvos.length;
+  await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(200);
+  ok('admin vídeo: link falso NÃO é enviado ao servidor', salvos.length === antes);
+  await pagina.context().close();
+}
+{
+  const { pagina, salvos } = await novaPagina({ admin: true, ranking: { visivel: false, linhas: [{ apelido: 'Velha', pontos: 1 }] } });
+  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
+  await pagina.locator('.ranking-link').click(); await pagina.waitForSelector('text=Cole o ranking');
+  ok('admin ranking: abre com a lista já publicada', (await pagina.locator('.linha-rank').count()) === 1);
+  pagina.on('dialog', (d) => d.accept());
+  await pagina.locator('textarea').fill('Lu 40\nBia - 40\n1. Ana 20 pts\nlinha sem número');
+  await pagina.getByRole('button', { name: 'Ler a lista colada' }).click();
+  await pagina.waitForFunction(() => document.querySelectorAll('.linha-rank').length === 3);
+  ok('admin ranking: leu 3 linhas e avisou da que não entendeu', (await pagina.textContent('.nota:has-text("Li 3")')).includes('linha sem número'));
+  const posicoes = await pagina.locator('.linha-rank .rank-pos').allTextContents();
+  ok('admin ranking: mostra as posições com empate', JSON.stringify(posicoes) === JSON.stringify(['1º', '1º', '3º']), JSON.stringify(posicoes));
+  await pagina.locator('.linha-rank input[type=number]').nth(2).fill('50');
+  await pagina.waitForFunction(() => document.querySelector('.linha-rank .rank-pos:last-of-type') && [...document.querySelectorAll('.linha-rank .rank-pos')].at(-1).textContent === '1º');
+  ok('admin ranking: editar os pontos recalcula a posição na hora', true);
+  ok('admin ranking: a prévia mostra como as meninas veem', (await pagina.locator('.previa-dia .rank-item').count()) === 3);
+  await pagina.locator('.check input').check();
+  await pagina.getByRole('button', { name: 'Publicar ranking' }).click(); await pagina.waitForTimeout(250);
+  const pub = salvos.find((x) => x.nome === 'admin_publicar_ranking')?.corpo;
+  ok('admin ranking: publica a lista na ordem colada e a visibilidade', JSON.stringify(pub?.p) === JSON.stringify([{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { apelido: 'Ana', pontos: 50 }]) && pub.p_visivel === true, JSON.stringify(pub));
+  await foto(pagina, '11-admin-ranking');
+  await pagina.locator('.linha-rank input[type=text]').first().fill('');
+  const n = salvos.length;
+  await pagina.getByRole('button', { name: 'Publicar ranking' }).click(); await pagina.waitForTimeout(200);
+  ok('admin ranking: apelido vazio não é enviado', salvos.length === n && (await pagina.textContent('.aviso')).includes('linha 1'));
   await pagina.context().close();
 }
 

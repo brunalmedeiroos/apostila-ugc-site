@@ -1,6 +1,7 @@
 import { diaMes, estaAberto, concluido } from './regras.js';
 import { h } from './dom.js';
 import { cabecaDoDia, corpoDoDia } from './dia-view.js';
+import { cartaoRanking } from './ranking-view.js';
 
 const cfg = window.APOSTILA_CONFIG;
 const TOTAL = cfg.totalDias;
@@ -131,6 +132,9 @@ function telaLista() {
     h('div', { class: 'topo' }, h('p', { class: 'marca' }, 'Bru Medeiros'), botaoSair()),
     h('section', { class: 'card resumo' }, anel(feitos),
       h('div', {}, h('h1', {}, cfg.nomeDesafio), h('p', {}, feitos === 0 ? 'Vamos começar juntas?' : `${feitos} de ${TOTAL} dias concluídos.`))),
+    estado.config?.ranking_visivel
+      ? h('a', { class: 'card ranking-link', href: '#/ranking' }, h('span', { class: 'dia-titulo' }, 'Ranking'), h('span', { class: 'dia-lado' }, 'Ver'))
+      : null,
     h('nav', { class: 'card lista-dias', 'aria-label': 'Dias do desafio' }, itens),
   );
 }
@@ -152,6 +156,17 @@ async function marcar(dia, item, caixa) {
     valor ? estado.marcados.delete(chave) : estado.marcados.set(chave, true);
     avisar('Não consegui salvar. Confira a internet e tente de novo.', true);
   }
+}
+
+async function telaRanking() {
+  const voltar = h('a', { class: 'btn-texto voltar', href: '#/' }, '← Todos os dias');
+  if (!estado.config?.ranking_visivel) {
+    return mostrar(voltar, h('section', { class: 'card fechado' }, h('h1', {}, 'O ranking ainda não abriu'), h('p', {}, 'Quando ele abrir, aparece aqui.')));
+  }
+  mostrar(voltar, h('p', { class: 'carregando' }, 'Carregando…'));
+  const { data, error } = await db.from('ranking').select('apelido,pontos,ordem').order('ordem');
+  if (error) return mostrar(voltar, h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, 'Não consegui carregar o ranking. Tente de novo.')));
+  mostrar(voltar, h('h1', { class: 'titulo-admin' }, 'Ranking'), cartaoRanking(data, estado.config.ranking_atualizado_em));
 }
 
 function telaDia(n) {
@@ -190,6 +205,7 @@ function rotear() {
       .catch((e) => { console.error(e); avisar('Não consegui abrir o admin.', true); });
   }
   if (!estado.sessao) return telaLogin();
+  if (location.hash === '#/ranking') return telaRanking();
   const m = location.hash.match(/^#\/dia\/(\d+)$/);
   return m ? telaDia(Number(m[1])) : telaLista();
 }

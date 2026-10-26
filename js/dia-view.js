@@ -1,7 +1,7 @@
 // As peças da página de um dia. Usadas pela tela das meninas (app.js) e pela
 // prévia do admin (admin.js), para as duas serem sempre idênticas.
 import { h } from './dom.js';
-import { linkSeguro } from './regras.js';
+import { linkSeguro, ehIdYoutube, urlEmbedYoutube } from './regras.js';
 import { renderizarDocumento } from './documento.js';
 
 // Texto livre da Bruna (aprender, tarefa, enviar): mesma formatação do documento.
@@ -16,8 +16,17 @@ export function secaoEstude(c) {
     const url = e.url ? linkSeguro(e.url) : null;
     return h('li', {}, url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, e.titulo) : h('span', { class: 'sem-link' }, `${e.titulo} (link em breve)`));
   });
+  const video = ehIdYoutube(c.video_id)
+    ? h('div', { class: 'video' },
+      h('p', { class: 'prefere' }, 'Prefere ouvir? Assista ao vídeo do dia.'),
+      h('div', { class: 'video-moldura' }, h('iframe', {
+        src: urlEmbedYoutube(c.video_id), title: 'Vídeo do dia', loading: 'lazy', allowfullscreen: true,
+        referrerpolicy: 'strict-origin-when-cross-origin', allow: 'encrypted-media; picture-in-picture; fullscreen',
+        sandbox: 'allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox' })))
+    : null;
   return secao('Estude',
     c.estude_minutos ? h('p', { class: 'tempo' }, `Cerca de ${c.estude_minutos} min`) : null,
+    video,
     c.documento ? h('div', { class: 'documento' }, renderizarDocumento(c.documento)) : null,
     links.length ? h('ul', { class: 'links-estudo' }, links) : null);
 }
