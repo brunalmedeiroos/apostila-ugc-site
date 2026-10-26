@@ -1,6 +1,6 @@
-import { diaMes, estaAberto, concluido, linkSeguro, textoPrazoStory } from './regras.js';
+import { diaMes, estaAberto, concluido } from './regras.js';
 import { h } from './dom.js';
-import { renderizarDocumento } from './documento.js';
+import { cabecaDoDia, corpoDoDia } from './dia-view.js';
 
 const cfg = window.APOSTILA_CONFIG;
 const TOTAL = cfg.totalDias;
@@ -140,47 +140,6 @@ function botaoSair() {
 }
 
 // ---------- página do dia ----------
-function secao(titulo, ...conteudo) {
-  return h('section', { class: 'card secao' }, h('h2', {}, titulo), ...conteudo);
-}
-
-function secaoEstude(c) {
-  const links = (c.estude ?? []).map((e) => {
-    const url = e.url ? linkSeguro(e.url) : null;
-    return h('li', {}, url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, e.titulo) : h('span', { class: 'sem-link' }, `${e.titulo} (link em breve)`));
-  });
-  return secao('Estude',
-    c.estude_minutos ? h('p', { class: 'tempo' }, `Cerca de ${c.estude_minutos} min`) : null,
-    c.documento ? h('div', { class: 'documento' }, renderizarDocumento(c.documento)) : null,
-    links.length ? h('ul', { class: 'links-estudo' }, links) : null);
-}
-
-function secaoEnviar(c, dia) {
-  const url = estado.config?.link_grupo ? linkSeguro(estado.config.link_grupo) : null;
-  const insta = estado.config?.instagram || '@brunalmedeiroos';
-  return secao('O que enviar no grupo',
-    h('p', {}, c.enviar),
-    url
-      ? h('a', { class: 'btn btn-primario', href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o grupo')
-      : h('span', { class: 'btn', 'aria-disabled': 'true' }, 'Link do grupo em breve'),
-    h('div', { class: 'pontos' },
-      h('p', {}, 'Enviar no grupo a prova do dia vale ', h('strong', {}, '1 ponto'), '.'),
-      h('p', {}, `Postar um story marcando ${insta} vale `, h('strong', {}, '+1 ponto de bônus'), '.'),
-      h('p', { class: 'prazo' }, `Prazo do story: ${textoPrazoStory(dia.libera_em)}.`)));
-}
-
-function secaoChecklist(c) {
-  const itens = (c.checklist ?? []).map((i) => {
-    const chave = `${c.numero}:${i.id}`;
-    const caixa = h('input', { type: 'checkbox' });
-    caixa.checked = estado.marcados.has(chave);
-    caixa.addEventListener('change', () => marcar(c.numero, i.id, caixa));
-    return h('li', {}, h('label', { class: 'check' }, caixa, h('span', {}, i.texto, i.opcional ? h('span', { class: 'opcional' }, 'opcional') : null)));
-  });
-  return secao('Checklist final', h('ul', { class: 'checklist' }, itens),
-    h('p', { class: 'nota' }, 'Isso é só para você se organizar. Não é prova.'));
-}
-
 async function marcar(dia, item, caixa) {
   const chave = `${dia}:${item}`;
   const valor = caixa.checked;
@@ -216,12 +175,8 @@ function telaDia(n) {
     : proxAberto ? h('a', { class: 'btn btn-primario prox', href: `#/dia/${n + 1}` }, 'Próximo →')
     : h('span', { class: 'btn prox', 'aria-disabled': 'true' }, proxDia.libera_em ? `Abre dia ${diaMes(proxDia.libera_em)}` : 'Em breve');
 
-  const cabeca = h('header', { class: 'cabeca-dia' }, h('span', { class: 'dia-num' }, `Dia ${n} de ${TOTAL}`), h('h1', {}, dia.titulo));
-  const tarefa = secao('Tarefa do dia', h('p', {}, c.tarefa ?? 'Em breve.'));
-
-  const corpo = c.em_breve
-    ? [tarefa, secao('Conteúdo em breve', h('p', {}, 'O resto deste dia ainda não está pronto. Volte aqui em breve.'))]
-    : [secao('O que você vai aprender hoje', h('p', {}, c.aprender)), secaoEstude(c), tarefa, secaoEnviar(c, dia), secaoChecklist(c)];
+  const cabeca = cabecaDoDia(n, dia.titulo, TOTAL);
+  const corpo = corpoDoDia(c, dia, estado.config, estado.marcados, marcar);
 
   mostrar(voltar, cabeca, ...corpo, h('nav', { class: 'navegacao', 'aria-label': 'Navegar entre os dias' }, anterior, proximo));
   raiz.focus({ preventScroll: true });

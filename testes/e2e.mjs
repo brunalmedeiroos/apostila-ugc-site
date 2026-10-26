@@ -209,6 +209,14 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   ok('admin: prévia do documento atualiza ao digitar', (await pagina.textContent('.previa h3')) === 'Oi' && (await pagina.locator('.previa li strong').count()) === 1);
   await pagina.getByRole('button', { name: '+ Adicionar item' }).click();
   await pagina.locator('.linha-check input[type=text]').last().fill('Fiz a tarefa extra');
+  await pagina.getByRole('button', { name: 'Ver como as meninas veem' }).click();
+  await pagina.waitForSelector('.previa-dia:not([hidden]) .cabeca-dia');
+  const titulosPrevia = await pagina.locator('.previa-dia h2').allTextContents();
+  ok('admin: prévia mostra o dia inteiro, 5 seções na ordem que as meninas veem', JSON.stringify(titulosPrevia) === JSON.stringify(['O que você vai aprender hoje', 'Estude', 'Tarefa do dia', 'O que enviar no grupo', 'Checklist final']), titulosPrevia.join(' > '));
+  ok('admin: prévia mostra título, documento formatado e item novo do checklist', (await pagina.textContent('.previa-dia .cabeca-dia h1')) === 'Título novo' && (await pagina.locator('.previa-dia .documento h3').textContent()) === 'Oi' && (await pagina.locator('.previa-dia .check').count()) === fixtures.conteudo[0].checklist.length + 1);
+  ok('admin: prévia calcula o prazo do story pela data escolhida', (await pagina.textContent('.previa-dia .prazo')).includes('até 23h59 de 20/11'));
+  ok('admin: prévia não salva nada', !salvos.some((x) => x.nome === 'admin_salvar_dia'));
+  await foto(pagina, '8c-admin-previa');
   await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(250);
   const dia = salvos.find((x) => x.nome === 'admin_salvar_dia')?.corpo.p;
   ok('admin: salvar envia título, data de Fortaleza e documento', dia?.numero === 1 && dia.titulo === 'Título novo' && dia.libera_em === '2026-11-20T00:00:00-03:00' && dia.documento.startsWith('## Oi'), JSON.stringify(dia));

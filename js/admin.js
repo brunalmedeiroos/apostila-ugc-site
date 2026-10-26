@@ -3,6 +3,7 @@
 import { h } from './dom.js';
 import { diaMes, estaAberto, dataFortaleza, paraLiberaEm, novoIdChecklist } from './regras.js';
 import { renderizarDocumento } from './documento.js';
+import { cabecaDoDia, corpoDoDia } from './dia-view.js';
 
 const PAINEL = 'https://brunamedeiros.com/login';
 
@@ -20,7 +21,7 @@ export async function abrirAdmin({ db, mostrar, avisar, rota }) {
   const m = rota.match(/^#\/admin\/dia\/(\d+)$/);
   if (m) {
     const dia = dias.find((d) => d.numero === Number(m[1]));
-    if (dia) return telaDia({ db, mostrar, avisar, dia });
+    if (dia) return telaDia({ db, mostrar, avisar, dia, config: config ?? {} });
   }
   return telaLista({ db, mostrar, avisar, dias, config: config ?? {} });
 }
@@ -55,7 +56,7 @@ function telaLista({ db, mostrar, avisar, dias, config }) {
 }
 
 // ---------- um dia ----------
-function telaDia({ db, mostrar, avisar, dia }) {
+function telaDia({ db, mostrar, avisar, dia, config }) {
   let sujo = false;
   const marca = () => { sujo = true; };
   const campo = (rotulo, el, dica) => h('label', { class: 'campo' }, h('span', {}, rotulo), el, dica ? h('small', {}, dica) : null);
@@ -103,26 +104,47 @@ function telaDia({ db, mostrar, avisar, dia }) {
   documento.addEventListener('input', atualizaPrevia);
   atualizaPrevia();
 
-  const botao = h('button', { class: 'btn btn-primario', type: 'button' }, 'Salvar dia');
-  botao.addEventListener('click', async () => {
+  // Lê o formulário. Devolve { p } pronto para salvar, ou { erro } com o que falta.
+  const coletar = () => {
     const estude = [...estudeBox.children].map((l) => l._ler()).filter((e) => e.titulo || e.url);
-    if (estude.some((e) => !e.titulo)) return avisar('Todo item de estudo precisa de um título.', true);
+    if (estude.some((e) => !e.titulo)) return { erro: 'Todo item de estudo precisa de um título.' };
     const checklist = [...checkBox.children].map((l) => l._ler()).filter((c) => c.texto)
       .map((c) => ({ id: c.id ?? novoIdChecklist(c.texto), texto: c.texto, ...(c.opcional ? { opcional: true } : {}) }));
-    if (!titulo.value.trim()) return avisar('O dia precisa de um título.', true);
+    if (!titulo.value.trim()) return { erro: 'O dia precisa de um título.' };
     let libera_em;
-    try { libera_em = paraLiberaEm(abreEm.value); } catch (e) { return avisar(e.message, true); }
-
-    botao.disabled = true;
-    const { error } = await db.rpc('admin_salvar_dia', { p: {
+    try { libera_em = paraLiberaEm(abreEm.value); } catch (e) { return { erro: e.message }; }
+    return { p: {
       numero: dia.numero, titulo: titulo.value.trim(), libera_em, em_breve: !pronto.checked,
       aprender: aprender.value, estude, estude_minutos: minutos.value === '' ? null : Number(minutos.value),
-      tarefa: tarefa.value, enviar: enviar.value, checklist, documento: documento.value } });
+      tarefa: tarefa.value, enviar: enviar.value, checklist, documento: documento.value } };
+  };
+
+  const botao = h('button', { class: 'btn btn-primario', type: 'button' }, 'Salvar dia');
+  botao.addEventListener('click', async () => {
+    const r = coletar();
+    if (r.erro) return avisar(r.erro, true);
+    botao.disabled = true;
+    const { error } = await db.rpc('admin_salvar_dia', { p: r.p });
     botao.disabled = false;
     if (error) return avisar(`Não salvou: ${error.message}`, true);
     sujo = false;
     avisar('Dia salvo.');
     location.hash = '#/admin';
+  });
+
+  // Prévia: o dia inteiro como a menina vê. Não salva nada, e as marcações não ficam gravadas.
+  const previaDia = h('div', { class: 'previa-dia', hidden: true });
+  const botaoPrevia = h('button', { class: 'btn', type: 'button' }, 'Ver como as meninas veem');
+  botaoPrevia.addEventListener('click', () => {
+    const r = coletar();
+    if (r.erro) return avisar(r.erro, true);
+    const c = { ...r.p };
+    previaDia.replaceChildren(
+      h('p', { class: 'nota aviso-previa' }, 'Prévia. Nada disso foi salvo, e as marcações do checklist não ficam gravadas.'),
+      cabecaDoDia(dia.numero, r.p.titulo, window.APOSTILA_CONFIG.totalDias),
+      ...corpoDoDia(c, { titulo: r.p.titulo, libera_em: r.p.libera_em }, config, new Map(), () => {}));
+    previaDia.hidden = false;
+    previaDia.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   const voltar = h('a', { class: 'btn-texto voltar', href: '#/admin' }, '← Todos os dias');
@@ -147,5 +169,5 @@ function telaDia({ db, mostrar, avisar, dia }) {
     h('section', { class: 'card secao' }, h('h2', {}, '5. Checklist final'), checkBox,
       h('button', { class: 'btn-texto', type: 'button', onclick: () => { addCheck(); marca(); } }, '+ Adicionar item'),
       h('p', { class: 'nota' }, 'Itens já existentes mantêm o progresso das meninas mesmo se você mudar o texto.')),
-    botao);
+    h('div', { class: 'acoes' }, botaoPrevia, botao), previaDia);
 }

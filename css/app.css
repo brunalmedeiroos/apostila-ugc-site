@@ -240,3 +240,9 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue-dark); }
 #principal .btn-primario[type='button'] { margin-top: 16px; }
 .documento + .links-estudo { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--linha); }
 .documento + .links-estudo li:first-child { border-top: none; padding-top: 0; }
+
+.acoes { display: grid; gap: 12px; margin-top: 20px; }
+.acoes .btn { width: 100%; margin-top: 0 !important; }
+.previa-dia { margin-top: 24px; padding: 16px 12px 20px; border: 2px dashed var(--blue-light); border-radius: 28px; }
+.previa-dia[hidden] { display: none; }
+.aviso-previa { margin: 0 0 12px; font-weight: 600; }
