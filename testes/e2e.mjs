@@ -253,7 +253,7 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   ok('admin: dia 1 abre com os dados atuais', (await pagina.locator('input[type=text]').first().inputValue()) === fixtures.agenda[0].titulo);
   ok('admin: checklist do dia 1 tem os itens existentes', (await pagina.locator('.linha-check').count()) === fixtures.conteudo[0].checklist.length);
   await pagina.locator('input[type=text]').first().fill('Título novo');
-  await pagina.locator('input[type=date]').fill('2026-11-20');
+  ok('admin: não existe mais campo de data, só a caixa "Liberado"', (await pagina.locator('input[type=date]').count()) === 0 && await pagina.getByLabel(/Liberado para as meninas/).isChecked());
   await pagina.locator('textarea').nth(1).fill('## Oi\n\n- **a**');   // documento
   ok('admin: prévia do documento atualiza ao digitar', (await pagina.textContent('.previa h3')) === 'Oi' && (await pagina.locator('.previa li strong').count()) === 1);
   await pagina.getByRole('button', { name: '+ Adicionar item' }).click();
@@ -268,16 +268,29 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   await foto(pagina, '8c-admin-previa');
   await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(250);
   const dia = salvos.find((x) => x.nome === 'admin_salvar_dia')?.corpo.p;
-  ok('admin: salvar envia título, data de Fortaleza e documento', dia?.numero === 1 && dia.titulo === 'Título novo' && dia.libera_em === '2026-11-20T00:00:00-03:00' && dia.documento.startsWith('## Oi'), JSON.stringify(dia));
+  ok('admin: salvar um dia já liberado mantém a data em que abriu', dia?.numero === 1 && dia.titulo === 'Título novo' && Date.parse(dia.libera_em) === Date.parse(agenda[0].libera_em) && dia.documento.startsWith('## Oi'), JSON.stringify(dia));
   ok('admin: itens antigos do checklist mantêm o id', fixtures.conteudo[0].checklist.every((i, k) => dia.checklist[k].id === i.id), JSON.stringify(dia?.checklist));
   ok('admin: item novo ganha id próprio', /^fiz_a_tarefa_extra_[a-z0-9]{4}$/.test(dia.checklist.at(-1).id), dia.checklist.at(-1).id);
-  ok('admin: dia continua "pronto" se a caixa estava marcada', dia.em_breve === false);
+  ok('admin: dia continua liberado se a caixa estava marcada', dia.em_breve === false);
   ok('admin: depois de salvar volta para a lista', await pagina.locator('.titulo-admin:has-text("Admin do desafio")').isVisible());
   ok('admin: sem erros no console', erros.length === 0, erros.join(' | '));
   await pagina.locator('.lista-dias .dia-item').nth(1).click(); await pagina.waitForSelector('text=Checklist final');
   await pagina.locator('input[type=text]').first().fill('');
   await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(150);
   ok('admin: título vazio é recusado antes de enviar', salvos.filter((x) => x.nome === 'admin_salvar_dia').length === 1 && (await pagina.textContent('.aviso')).includes('título'));
+  pagina.once('dialog', (d) => d.accept());
+  await pagina.getByRole('link', { name: '← Todos os dias' }).click(); await pagina.waitForSelector('.lista-dias');
+  await pagina.locator('.lista-dias .dia-item').nth(3).click(); await pagina.waitForSelector('text=Checklist final');
+  ok('admin: dia fechado vem com a caixa desmarcada', !(await pagina.getByLabel(/Liberado para as meninas/).isChecked()));
+  await pagina.getByLabel(/Liberado para as meninas/).check();
+  await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(250);
+  const lib = salvos.filter((x) => x.nome === 'admin_salvar_dia').at(-1)?.corpo.p;
+  ok('admin: marcar "Liberado" abre o dia agora (data de agora, nada futuro)', lib?.em_breve === false && Math.abs(Date.now() - Date.parse(lib.libera_em)) < 60000, JSON.stringify(lib?.libera_em));
+  await pagina.locator('.lista-dias .dia-item').nth(0).click(); await pagina.waitForSelector('text=Checklist final');
+  await pagina.getByLabel(/Liberado para as meninas/).uncheck();
+  await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(250);
+  const fech = salvos.filter((x) => x.nome === 'admin_salvar_dia').at(-1)?.corpo.p;
+  ok('admin: desmarcar "Liberado" fecha o dia (sem data)', fech?.numero === 1 && fech.libera_em === null);
   await foto(pagina, '8b-admin-dia');
   await pagina.context().close();
 }

@@ -1,7 +1,7 @@
 // Área só da Bruna. A proteção de verdade está no servidor (funções admin_* do Supabase):
 // mesmo que alguém abra esta tela, o banco recusa tudo que não for da admin.
 import { h } from './dom.js';
-import { diaMes, estaAberto, dataFortaleza, paraLiberaEm, novoIdChecklist, idYoutube } from './regras.js';
+import { estaAberto, novoIdChecklist, idYoutube } from './regras.js';
 import { renderizarDocumento } from './documento.js';
 import { cabecaDoDia, corpoDoDia } from './dia-view.js';
 
@@ -39,10 +39,9 @@ function telaLista({ db, mostrar, avisar, dias, config }) {
   });
 
   const linhas = dias.map((d) => {
-    const abre = !d.libera_em ? 'sem data' : estaAberto(d.libera_em) ? 'aberto' : `abre dia ${diaMes(d.libera_em)}`;
     return h('a', { class: 'dia-item', href: `#/admin/dia/${d.numero}` },
       h('span', { class: 'dia-texto' }, h('span', { class: 'dia-num' }, `Dia ${d.numero}`), h('span', { class: 'dia-titulo' }, d.titulo)),
-      h('span', { class: 'dia-lado' }, d.em_breve ? 'em breve' : 'pronto', h('br'), abre));
+      h('span', { class: 'dia-lado' }, estaAberto(d.libera_em) ? 'liberado' : 'fechado'));
   });
 
   mostrar(
@@ -65,9 +64,9 @@ function telaDia({ db, mostrar, avisar, dia, config }) {
   const texto = (valor, linhas = 3) => h('textarea', { rows: linhas, value: valor ?? '', oninput: marca });
 
   const titulo = h('input', { type: 'text', value: dia.titulo ?? '', maxlength: 200, oninput: marca });
-  const abreEm = h('input', { type: 'date', value: dataFortaleza(dia.libera_em), oninput: marca });
-  const pronto = h('input', { type: 'checkbox', onchange: marca });
-  pronto.checked = !dia.em_breve;
+  const jaLiberado = estaAberto(dia.libera_em);
+  const liberado = h('input', { type: 'checkbox', onchange: marca });
+  liberado.checked = jaLiberado;
   const aprender = texto(dia.aprender);
   const minutos = h('input', { type: 'number', min: 0, max: 600, value: dia.estude_minutos ?? '', oninput: marca });
   const tarefa = texto(dia.tarefa);
@@ -121,10 +120,9 @@ function telaDia({ db, mostrar, avisar, dia, config }) {
     if (!titulo.value.trim()) return { erro: 'O dia precisa de um título.' };
     const videoId = video.value.trim() ? idYoutube(video.value) : null;
     if (video.value.trim() && !videoId) return { erro: 'Não reconheci o link do vídeo. Use o link do YouTube.' };
-    let libera_em;
-    try { libera_em = paraLiberaEm(abreEm.value); } catch (e) { return { erro: e.message }; }
+    const libera_em = !liberado.checked ? null : jaLiberado ? dia.libera_em : new Date().toISOString();
     return { p: {
-      numero: dia.numero, titulo: titulo.value.trim(), libera_em, em_breve: !pronto.checked,
+      numero: dia.numero, titulo: titulo.value.trim(), libera_em, em_breve: !liberado.checked,
       aprender: aprender.value, estude, estude_minutos: minutos.value === '' ? null : Number(minutos.value),
       tarefa: tarefa.value, enviar: enviar.value, checklist, documento: documento.value, video_id: videoId } };
   };
@@ -163,8 +161,8 @@ function telaDia({ db, mostrar, avisar, dia, config }) {
   mostrar(voltar, h('h1', { class: 'titulo-admin' }, `Dia ${dia.numero}`),
     h('section', { class: 'card secao' }, h('h2', {}, 'Básico'),
       campo('Título', titulo),
-      campo('Abre em', abreEm, 'Abre às 00:00 de Fortaleza. Deixe vazio para o dia ficar fechado.'),
-      h('label', { class: 'check' }, pronto, h('span', {}, 'Este dia está pronto (desmarcado, as meninas veem "conteúdo em breve")'))),
+      h('label', { class: 'check' }, liberado, h('span', {}, 'Liberado para as meninas (desmarcado, o dia fica fechado)')),
+      h('small', {}, 'Marque quando quiser abrir o dia e clique em Salvar dia. Para fechar de novo, desmarque.')),
     h('section', { class: 'card secao' }, h('h2', {}, '1. O que você vai aprender hoje'), campo('Texto', aprender, 'Aceita **negrito**, listas com - e links. Linha em branco separa parágrafos.')),
     h('section', { class: 'card secao' }, h('h2', {}, '2. Estude'),
       campo('Tempo estimado (minutos)', minutos),
