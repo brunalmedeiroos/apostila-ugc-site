@@ -19,7 +19,13 @@ const abertos = new Set(agenda.filter((a) => a.libera_em && new Date(a.libera_em
 const server = await servir();
 const browser = await chromium.launch();
 
-async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null, participantes = [], minhaFicha = null, apelidoEmUso = false } = {}) {
+const PONTUACAO = { itens: [{ id: 'marca', texto: 'A marca escolhida', pontos: 5 }, { id: 'ref', texto: 'Uma referência', pontos: 5 }, { id: 'ideia', texto: 'Sua ideia', pontos: 10 }],
+  participantes: [{ id: 'p1', nome: 'Ana Souza', apelido: 'Ana', status: 'ativa', feitos: ['marca'], total_dia: 5 }, { id: 'p2', nome: 'Bia', apelido: 'Bia', status: 'ativa', feitos: [], total_dia: 0 }] };
+const HISTORICO = [{ id: 'h1', dia: 1, motivo: 'A marca escolhida', pontos: 5, valido: true, anulado_em: null, criado_em: '2026-10-26T12:00:00+00:00', observacao: null },
+  { id: 'h2', dia: null, motivo: 'Atraso', pontos: -2, valido: false, anulado_em: '2026-10-26T13:00:00+00:00', criado_em: '2026-10-26T12:30:00+00:00', observacao: null }];
+const CALCULADO = { linhas: [{ apelido: 'Ana', pontos: 20, entregas: 3 }, { apelido: 'Bia', pontos: 7, entregas: 1 }], sem_apelido: 2 };
+
+async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null, participantes = [], minhaFicha = null, apelidoEmUso = false, falhaLancar = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Fortaleza' });
   const pagina = await ctx.newPage();
   const progresso = [...progressoInicial];
@@ -40,6 +46,14 @@ async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = 
       if (!admin) return json({ message: 'sem acesso', code: '42501' }, 403);
       if (nome === 'admin_dias') return json(agenda.map((a) => { const c = fixtures.conteudo.find((x) => x.numero === a.numero); return { ...a, ...c, documento: c.documento ?? null, video_id: (a.numero === 1 ? videoDia1 : null) }; }));
       if (nome === 'admin_participantes') return json(participantes);
+      if (nome === 'admin_pontuacao_dia') return json(PONTUACAO);
+      if (nome === 'admin_historico_pontos') return json(HISTORICO);
+      if (nome === 'admin_ranking_calculado') return json(CALCULADO);
+      if (nome === 'admin_lancar_pontos_dia') {
+        if (falhaLancar) return json({ message: 'boom' }, 500);
+        salvos.push({ nome, corpo });
+        return json(PONTUACAO.itens.filter((i) => corpo.p_itens.includes(i.id)).reduce((a, i) => a + i.pontos, 0));
+      }
       if (nome === 'admin_ranking') return json({ visivel: Boolean(ranking?.visivel), atualizado_em: ranking ? '2026-10-26T17:30:00+00:00' : null, linhas: ranking?.linhas ?? [] });
       salvos.push({ nome, corpo }); return route.fulfill({ status: 204, body: '' });
     }
@@ -336,7 +350,7 @@ const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { a
 {
   const { pagina, salvos } = await novaPagina({ admin: true, ranking: { visivel: false, linhas: [{ apelido: 'Velha', pontos: 1 }] } });
   await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
-  await pagina.locator('.ranking-link:has-text("Ranking")').click(); await pagina.waitForSelector('text=Cole o ranking');
+  await pagina.locator('.ranking-link:has-text("Ranking")').click(); await pagina.waitForSelector('text=Monte a lista');
   ok('admin ranking: abre com a lista já publicada', (await pagina.locator('.linha-rank').count()) === 1);
   pagina.on('dialog', (d) => d.accept());
   await pagina.locator('textarea').fill('Lu 40\nBia - 40\n1. Ana 20 pts\nlinha sem número');
@@ -486,6 +500,94 @@ const PESSOAS = [
   await ligar.getByRole('button', { name: 'Ligar a este login' }).click(); await pagina.waitForTimeout(250);
   const lig = salvos.find((x) => x.nome === 'admin_ligar_ficha')?.corpo;
   ok('ligar: chama a função com a ficha e o login certos', lig?.p_ficha_id === 'f3' && lig?.p_user_id === 'u1', JSON.stringify(lig));
+  await pagina.context().close();
+}
+
+// ---- 15. Admin: pontos ----
+{
+  const { pagina, salvos, erros } = await novaPagina({ admin: true });
+  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
+  await pagina.locator('.ranking-link:has-text("Pontos")').click(); await pagina.waitForSelector('text=O que vale ponto no Dia 1');
+  ok('pontos: mostra os 3 itens do dia e o total de 20', (await pagina.locator('.linha-item').count()) === 3 && (await pagina.textContent('.secao:has(h2:text("O que vale ponto")) .nota')).includes('Total do dia: 20 pontos'));
+  ok('pontos: lista as participantes e mostra quem já cumpriu', (await pagina.locator('.pessoa-pontos').count()) === 2 && (await pagina.locator('.pessoa-pontos').first().locator('input:checked').count()) === 1 && (await pagina.locator('.pessoa-pontos').first().locator('.total-dia').textContent()) === '5 pts');
+  await pagina.locator('.pessoa-pontos').first().locator('[data-item="ref"]').check(); await pagina.waitForTimeout(250);
+  const l1 = salvos.find((x) => x.nome === 'admin_lancar_pontos_dia')?.corpo;
+  ok('pontos: marcar um item salva na hora a lista completa de marcados', l1?.p_dia === 1 && l1.p_participante === 'p1' && JSON.stringify(l1.p_itens) === JSON.stringify(['marca', 'ref']), JSON.stringify(l1));
+  ok('pontos: o total da pessoa se atualiza com a resposta do servidor', (await pagina.locator('.pessoa-pontos').first().locator('.total-dia').textContent()) === '10 pts');
+  await pagina.locator('.pessoa-pontos').first().locator('[data-item="marca"]').uncheck(); await pagina.waitForTimeout(250);
+  ok('pontos: desmarcar envia a lista sem o item', JSON.stringify(salvos.filter((x) => x.nome === 'admin_lancar_pontos_dia').at(-1).corpo.p_itens) === JSON.stringify(['ref']));
+  await foto(pagina, '15-pontos');
+
+  // itens do dia
+  const campos = pagina.locator('.linha-item');
+  await campos.nth(2).locator('input[type=number]').fill('8');
+  ok('pontos: mudar um valor refaz o total na hora', (await pagina.textContent('.secao:has(h2:text("O que vale ponto")) .nota')).includes('Total do dia: 18 pontos'));
+  await pagina.getByRole('button', { name: '+ Adicionar item' }).first().click();
+  await pagina.locator('.linha-item').nth(3).locator('input[type=text]').fill('Bônus do dia');
+  await pagina.locator('.linha-item').nth(3).locator('input[type=number]').fill('2');
+  await pagina.getByRole('button', { name: 'Salvar itens do dia' }).click(); await pagina.waitForTimeout(250);
+  const it = salvos.find((x) => x.nome === 'admin_salvar_pontuacao_dia')?.corpo;
+  ok('pontos: salvar itens mantém os ids antigos, cria id do novo e manda pontos como número', it?.p_dia === 1 && it.p_itens.slice(0, 3).map((i) => i.id).join() === 'marca,ref,ideia' && it.p_itens[2].pontos === 8 && /^bonus_do_dia_[a-z0-9]{4}$/.test(it.p_itens[3].id) && it.p_itens[3].pontos === 2, JSON.stringify(it));
+  const antes = salvos.length;
+  await pagina.getByRole('button', { name: '+ Adicionar item' }).first().click();
+  await pagina.locator('.linha-item').last().locator('input[type=text]').fill('Sem pontos');
+  await pagina.getByRole('button', { name: 'Salvar itens do dia' }).click(); await pagina.waitForTimeout(200);
+  ok('pontos: item sem pontos não é enviado', salvos.length === antes && (await pagina.textContent('.aviso')).includes('pontos'));
+
+  // extra
+  await pagina.locator('.secao:has(h2:text("Ponto extra")) input[type=number]').fill('0');
+  await pagina.locator('.secao:has(h2:text("Ponto extra")) input[type=text]').fill('Ajudou');
+  const n0 = salvos.length;
+  await pagina.getByRole('button', { name: 'Lançar' }).click(); await pagina.waitForTimeout(150);
+  ok('pontos: extra de zero ponto é recusado antes de enviar', salvos.length === n0);
+  await pagina.locator('.secao:has(h2:text("Ponto extra")) input[type=number]').fill('-2');
+  await pagina.locator('.secao:has(h2:text("Ponto extra")) select').selectOption('p2');
+  await pagina.getByRole('button', { name: 'Lançar' }).click(); await pagina.waitForTimeout(250);
+  const ex = salvos.find((x) => x.nome === 'admin_lancar_extra')?.corpo;
+  ok('pontos: extra manda participante, motivo e pontos negativos como número', ex?.p_participante === 'p2' && ex.p_motivo === 'Ajudou' && ex.p_pontos === -2, JSON.stringify(ex));
+
+  // histórico
+  await pagina.locator('.secao:has(h2:text("Histórico")) select').selectOption('p1'); await pagina.waitForSelector('.hist-lista');
+  ok('pontos: histórico mostra válido e anulado, com total só do válido', (await pagina.locator('.hist-lista li').count()) === 2 && (await pagina.locator('.hist-lista .anulado').count()) === 1 && (await pagina.textContent('.historico .nota')).includes('Total válido: 5'));
+  ok('pontos: só o lançamento válido tem botão Anular', (await pagina.getByRole('button', { name: 'Anular' }).count()) === 1);
+  pagina.on('dialog', (d) => d.accept());
+  await pagina.getByRole('button', { name: 'Anular' }).click(); await pagina.waitForTimeout(250);
+  ok('pontos: anular chama a função com o id do lançamento', salvos.some((x) => x.nome === 'admin_anular_ponto' && x.corpo.p_id === 'h1'));
+  ok('pontos: sem erros no console', erros.length === 0, erros.join(' | '));
+  await pagina.context().close();
+}
+{
+  const { pagina } = await novaPagina({ admin: true, falhaLancar: true });
+  await pagina.goto(url('#/admin/pontos/1')); await pagina.waitForSelector('.pessoa-pontos');
+  const c = pagina.locator('.pessoa-pontos').nth(1).locator('[data-item="marca"]');
+  await c.check(); await pagina.waitForSelector('.aviso.erro:not([hidden])');
+  ok('pontos: se o servidor recusa, a marcação volta ao que era e avisa', !(await c.isChecked()) && (await pagina.locator('.pessoa-pontos').nth(1).locator('.total-dia').textContent()) === '0 pts');
+  await pagina.context().close();
+}
+{
+  const { pagina } = await novaPagina({ admin: true });
+  await pagina.goto(url('#/admin/pontos/1')); await pagina.waitForSelector('.pessoa-pontos');
+  await pagina.locator('select[aria-label="Dia"]').selectOption('3');
+  await pagina.waitForSelector('text=O que vale ponto no Dia 3');
+  ok('pontos: trocar o dia abre a tela daquele dia', pagina.url().endsWith('#/admin/pontos/3'));
+  await pagina.context().close();
+}
+{
+  const { pagina, salvos } = await novaPagina({ admin: true, ranking: { visivel: false, linhas: [{ apelido: 'Velha', pontos: 1 }] } });
+  await pagina.goto(url('#/admin/ranking')); await pagina.waitForSelector('text=Monte a lista');
+  pagina.on('dialog', (d) => d.accept());
+  await pagina.getByRole('button', { name: 'Calcular a partir dos pontos' }).click();
+  await pagina.waitForFunction(() => document.querySelectorAll('.linha-rank').length === 2);
+  ok('ranking: calcular preenche a lista com os pontos lançados', (await pagina.locator('.linha-rank input[type=text]').first().inputValue()) === 'Ana' && (await pagina.locator('.linha-rank input[type=number]').first().inputValue()) === '20');
+  ok('ranking: avisa quantas ficaram de fora por falta de apelido', (await pagina.textContent('.nota:has-text("Calculei")')).includes('2 participante(s) sem apelido'));
+  await pagina.getByRole('button', { name: 'Publicar ranking' }).click(); await pagina.waitForTimeout(250);
+  ok('ranking: publicar manda exatamente o que foi calculado', JSON.stringify(salvos.find((x) => x.nome === 'admin_publicar_ranking')?.corpo.p) === JSON.stringify([{ apelido: 'Ana', pontos: 20 }, { apelido: 'Bia', pontos: 7 }]));
+  await pagina.context().close();
+}
+{
+  const { pagina, pedidos } = await novaPagina({ admin: false });
+  await pagina.goto(url('#/admin/pontos')); await pagina.waitForSelector('.fechado');
+  ok('pontos: quem não é admin vê "Área restrita" e nada é pedido', (await pagina.textContent('.fechado')).includes('Área restrita') && !pedidos.some((p) => p.includes('pontuacao')));
   await pagina.context().close();
 }
 
