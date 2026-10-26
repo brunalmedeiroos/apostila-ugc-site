@@ -9,6 +9,18 @@ const db = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
 const raiz = document.getElementById('principal');
 const avisoEl = document.getElementById('aviso');
 
+// Se o login falhou, o Supabase volta para cá com o motivo na URL.
+function lerErroDaUrl() {
+  const p = new URLSearchParams(location.search);
+  const h = new URLSearchParams(location.hash.replace(/^#\/?/, ''));
+  const descricao = p.get('error_description') || h.get('error_description');
+  const codigo = p.get('error') || h.get('error');
+  if (!descricao && !codigo) return null;
+  history.replaceState(null, '', location.pathname);
+  return descricao || codigo;
+}
+let erroLogin = lerErroDaUrl();
+
 const estado = { sessao: null, config: null, agenda: [], conteudo: new Map(), marcados: new Map() };
 
 // ---------- helpers de tela (sempre textContent: nada do banco vira HTML) ----------
@@ -54,6 +66,7 @@ function avisar(texto, erro = false) {
 function telaLogin() {
   const botao = h('button', { class: 'btn btn-primario btn-bloco', type: 'button' }, 'Entrar com Google');
   botao.addEventListener('click', async () => {
+    erroLogin = null;
     botao.disabled = true;
     const { error } = await db.auth.signInWithOAuth({
       provider: 'google',
@@ -69,6 +82,7 @@ function telaLogin() {
       h('p', { class: 'marca' }, 'Bru Medeiros'),
       h('h1', {}, cfg.nomeDesafio),
       h('div', { class: 'card' },
+        erroLogin ? h('p', { class: 'erro-login', role: 'alert' }, `O login não terminou: ${erroLogin}`) : null,
         h('p', {}, 'Entre com a sua conta Google. Sem senha e sem e-mail para esperar.'),
         botao,
         h('p', { class: 'privacidade' }, 'Usamos só o seu e-mail, e só para o seu acesso. O Google também envia nome e foto, mas não usamos nem mostramos. ', h('a', { href: 'privacidade.html' }, 'Política de privacidade')),
@@ -252,5 +266,5 @@ db.auth.onAuthStateChange((evento, sessao) => {
   const usuario = sessao?.user?.id ?? null;
   if (evento === 'TOKEN_REFRESHED' || (evento === 'SIGNED_IN' && usuario === ultimoUsuario)) return;
   ultimoUsuario = usuario;
-  iniciar(sessao);
+  setTimeout(() => iniciar(sessao), 0);
 });

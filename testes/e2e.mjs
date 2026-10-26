@@ -73,6 +73,23 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   await pagina.context().close();
 }
 
+// ---- 1b. Login que falhou: mostra o motivo ----
+{
+  const { pagina } = await novaPagina({ logada: false });
+  await pagina.goto(url('?error=server_error&error_description=Unable+to+exchange+external+code'));
+  await pagina.waitForSelector('.login');
+  ok('login com erro: mostra o motivo vindo do Supabase', (await pagina.textContent('.erro-login')).includes('Unable to exchange external code'));
+  ok('login com erro: limpa o erro da barra de endereço', !pagina.url().includes('error'));
+  await foto(pagina, '1b-login-erro');
+  await pagina.context().close();
+}
+{
+  const { pagina } = await novaPagina({ logada: false });
+  await pagina.goto(url('#error=access_denied&error_description=Access+denied')); await pagina.waitForSelector('.login');
+  ok('login com erro no #: também mostra o motivo', (await pagina.textContent('.erro-login')).includes('Access denied'));
+  await pagina.context().close();
+}
+
 // ---- 2. Lista ----
 {
   const { pagina, erros } = await novaPagina({ progressoInicial: [

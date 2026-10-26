@@ -201,3 +201,5 @@ ul { list-style: none; }
 .texto-legal ul { padding-left: 20px; list-style: disc; }
 .texto-legal li + li { margin-top: 6px; }
 .texto-legal .atualizado { font-size: 0.85rem; color: var(--blue-dark); }
+
+.erro-login { background: var(--offwhite); border-left: 4px solid var(--erro); border-radius: 10px; padding: 12px 14px; font-size: 0.9rem; color: var(--erro); font-weight: 600; word-break: break-word; }
