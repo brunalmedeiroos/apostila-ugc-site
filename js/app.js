@@ -1,4 +1,6 @@
 import { diaMes, estaAberto, concluido, linkSeguro, textoPrazoStory } from './regras.js';
+import { h } from './dom.js';
+import { renderizarDocumento } from './documento.js';
 
 const cfg = window.APOSTILA_CONFIG;
 const TOTAL = cfg.totalDias;
@@ -24,17 +26,6 @@ let erroLogin = lerErroDaUrl();
 const estado = { sessao: null, config: null, agenda: [], conteudo: new Map(), marcados: new Map() };
 
 // ---------- helpers de tela (sempre textContent: nada do banco vira HTML) ----------
-function h(tag, attrs = {}, ...filhos) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === false || v == null) continue;
-    if (k === 'class') el.className = v;
-    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else el.setAttribute(k, v === true ? '' : v);
-  }
-  for (const f of filhos.flat()) if (f != null && f !== false) el.append(f);
-  return el;
-}
 const NS = 'http://www.w3.org/2000/svg';
 function svg(tag, attrs = {}, ...filhos) {
   const el = document.createElementNS(NS, tag);
@@ -160,7 +151,8 @@ function secaoEstude(c) {
   });
   return secao('Estude',
     c.estude_minutos ? h('p', { class: 'tempo' }, `Cerca de ${c.estude_minutos} min`) : null,
-    h('ul', { class: 'links-estudo' }, links));
+    c.documento ? h('div', { class: 'documento' }, renderizarDocumento(c.documento)) : null,
+    links.length ? h('ul', { class: 'links-estudo' }, links) : null);
 }
 
 function secaoEnviar(c, dia) {
@@ -237,6 +229,11 @@ function telaDia(n) {
 
 // ---------- roteamento ----------
 function rotear() {
+  if (location.hash.startsWith('#/admin')) {
+    if (!estado.sessao) { try { sessionStorage.setItem('apostila_vai_admin', '1'); } catch { /* sem armazenamento: tudo bem */ } return telaLogin(); }
+    return import('./admin.js').then((m) => m.abrirAdmin({ db, mostrar, avisar, rota: location.hash }))
+      .catch((e) => { console.error(e); avisar('Não consegui abrir o admin.', true); });
+  }
   if (!estado.sessao) return telaLogin();
   const m = location.hash.match(/^#\/dia\/(\d+)$/);
   return m ? telaDia(Number(m[1])) : telaLista();
@@ -248,6 +245,7 @@ async function iniciar(sessao) {
   mostrar(h('p', { class: 'carregando' }, 'Carregando…'));
   try {
     await carregarTudo();
+    try { if (sessionStorage.getItem('apostila_vai_admin')) { sessionStorage.removeItem('apostila_vai_admin'); location.hash = '#/admin'; } } catch { /* ignora */ }
     rotear();
   } catch (e) {
     console.error(e);

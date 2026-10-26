@@ -203,3 +203,40 @@ ul { list-style: none; }
 .texto-legal .atualizado { font-size: 0.85rem; color: var(--blue-dark); }
 
 .erro-login { background: var(--offwhite); border-left: 4px solid var(--erro); border-radius: 10px; padding: 12px 14px; font-size: 0.9rem; color: var(--erro); font-weight: 600; word-break: break-word; }
+
+/* ---------- Documento do dia ---------- */
+.documento { margin-bottom: 8px; }
+.documento h3 { font-size: 1.15rem; margin: 22px 0 8px; }
+.documento h4 { font-size: 1rem; margin: 18px 0 6px; }
+.documento > :first-child { margin-top: 0; }
+.documento p { margin-top: 10px; }
+.documento ul, .documento ol { margin: 10px 0 0; padding-left: 22px; }
+.documento ul { list-style: disc; }
+.documento li + li { margin-top: 6px; }
+.documento blockquote { margin: 14px 0; padding: 4px 0 4px 14px; border-left: 4px solid var(--blue-light); font-weight: 600; color: var(--blue-dark); }
+.documento hr { border: none; border-top: 1px solid var(--linha); margin: 18px 0; }
+.documento a { word-break: break-word; }
+.documento.previa { margin-top: 10px; padding: 14px; border: 1px dashed var(--blue-light); border-radius: 14px; min-height: 48px; }
+
+/* ---------- Admin ---------- */
+.titulo-admin { margin: 4px 0 16px; }
+.campo { display: block; margin-top: 14px; }
+.campo > span { display: block; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--blue-dark); margin-bottom: 6px; }
+.campo small { display: block; margin-top: 6px; font-size: 0.8rem; color: var(--blue-dark); }
+input[type='text'], input[type='url'], input[type='number'], input[type='date'], textarea {
+  width: 100%; font: inherit; color: var(--ink); background: var(--white);
+  border: 2px solid var(--linha); border-radius: 12px; padding: 12px 14px; min-height: 48px;
+}
+textarea { resize: vertical; line-height: 1.5; }
+input:focus, textarea:focus { outline: none; border-color: var(--blue-dark); }
+.linhas { display: grid; gap: 10px; margin-top: 8px; }
+.linha { display: grid; gap: 8px; padding: 12px; background: var(--offwhite); border-radius: 14px; }
+.linha-check { grid-template-columns: 1fr; }
+.mini { font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.mini input { width: 20px; height: 20px; accent-color: var(--blue-dark); }
+.ajuda { margin-top: 12px; font-size: 0.88rem; }
+.ajuda summary { cursor: pointer; font-weight: 700; color: var(--blue-dark); min-height: 32px; }
+.secao .btn-texto { margin-top: 8px; }
+#principal .btn-primario[type='button'] { margin-top: 16px; }
+.documento + .links-estudo { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--linha); }
+.documento + .links-estudo li:first-child { border-top: none; padding-top: 0; }

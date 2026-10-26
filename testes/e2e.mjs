@@ -19,21 +19,29 @@ const abertos = new Set(agenda.filter((a) => a.libera_em && new Date(a.libera_em
 const server = await servir();
 const browser = await chromium.launch();
 
-async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false } = {}) {
+async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Fortaleza' });
   const pagina = await ctx.newPage();
   const progresso = [...progressoInicial];
   const pedidos = [];
+  const salvos = [];
   await pagina.route('https://fonts.g*/**', (r) => r.abort());
   await pagina.route('https://*.supabase.co/**', async (route) => {
     const req = route.request(); const u = new URL(req.url()); pedidos.push(`${req.method()} ${u.pathname}`);
     const json = (corpo, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(corpo) });
+    if (u.pathname.startsWith('/rest/v1/rpc/')) {
+      const nome = u.pathname.split('/').pop(); const corpo = req.postData() ? JSON.parse(req.postData()) : {};
+      if (nome === 'is_admin') return json(admin);
+      if (!admin) return json({ message: 'sem acesso', code: '42501' }, 403);
+      if (nome === 'admin_dias') return json(agenda.map((a) => { const c = fixtures.conteudo.find((x) => x.numero === a.numero); return { ...a, ...c, documento: c.documento ?? null }; }));
+      salvos.push({ nome, corpo }); return route.fulfill({ status: 204, body: '' });
+    }
     if (!u.pathname.startsWith('/rest/v1/')) return json({});
     const tabela = u.pathname.split('/').pop();
     if (req.method() === 'GET') {
       if (tabela === 'config') return json(fixtures.config);
       if (tabela === 'dias_agenda') return json(agenda);
-      if (tabela === 'dias_conteudo') return json(fixtures.conteudo.filter((c) => abertos.has(c.numero)));
+      if (tabela === 'dias_conteudo') return json(fixtures.conteudo.filter((c) => abertos.has(c.numero)).map((c) => (c.numero === 1 && documentoDia1 ? { ...c, documento: documentoDia1 } : c)));
       if (tabela === 'progresso') return json(progresso);
     }
     if (req.method() === 'POST' && tabela === 'progresso') {
@@ -55,7 +63,7 @@ async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = 
   }
   const erros = []; pagina.on('pageerror', (e) => erros.push(e.message));
   pagina.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|fonts\.g/.test(m.text())) erros.push(m.text()); });
-  return { pagina, progresso, pedidos, erros };
+  return { pagina, progresso, pedidos, erros, salvos };
 }
 const url = (h = '') => `http://localhost:8099/index.html${h}`;
 const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${nome}.png`, fullPage: true });
@@ -163,6 +171,70 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   await pagina.getByLabel(PRIMEIRO_ITEM).check();
   await pagina.waitForSelector('.aviso.erro:not([hidden])');
   ok('erro ao salvar: avisa e desmarca', !(await pagina.getByLabel(PRIMEIRO_ITEM).isChecked()));
+  await pagina.context().close();
+}
+
+
+// ---- 7. Documento do dia: formatação certa e nada de código ----
+{
+  const doc = '## Meu título\n\n- um\n- **dois**\n\n[site bom](https://exemplo.com/x)\n\n[site mau](javascript:alert(1))\n\n<script>window.__xss = 1</script>\n\n<img src=x onerror="window.__xss = 2">';
+  const { pagina, erros } = await novaPagina({ documentoDia1: doc });
+  await pagina.goto(url('#/dia/1')); await pagina.waitForSelector('.documento');
+  ok('documento: título e lista aparecem', (await pagina.textContent('.documento h3')) === 'Meu título' && (await pagina.locator('.documento li').count()) === 2 && (await pagina.locator('.documento li strong').count()) === 1);
+  ok('documento: link bom abre em outra aba com noopener', (await pagina.getAttribute('.documento a[href="https://exemplo.com/x"]', 'rel')) === 'noopener noreferrer');
+  ok('documento: link javascript: NÃO vira link', (await pagina.locator('.documento a[href^="javascript"]').count()) === 0);
+  ok('documento: <script> e <img onerror> aparecem como texto e não executam', (await pagina.evaluate(() => window.__xss)) === undefined && (await pagina.textContent('.documento')).includes('<script>') && (await pagina.locator('.documento img, .documento script').count()) === 0);
+  ok('documento: sem erros no console', erros.length === 0, erros.join(' | '));
+  await foto(pagina, '7-documento');
+  await pagina.context().close();
+}
+
+// ---- 8. Admin ----
+{
+  const { pagina, salvos, erros } = await novaPagina({ admin: true });
+  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.titulo-admin');
+  ok('admin: lista os 15 dias', (await pagina.locator('.lista-dias .dia-item').count()) === 15);
+  ok('admin: botão para o Painel abre o login do Painel', (await pagina.getAttribute('a:has-text("Abrir o Painel")', 'href')) === 'https://brunamedeiros.com/login');
+  await foto(pagina, '8a-admin-lista');
+  await pagina.locator('#cfg-link').fill('https://chat.whatsapp.com/novo');
+  await pagina.getByRole('button', { name: 'Salvar grupo' }).click(); await pagina.waitForTimeout(150);
+  ok('admin: salvar grupo chama a função certa', salvos.some((x) => x.nome === 'admin_salvar_config' && x.corpo.p_link === 'https://chat.whatsapp.com/novo'), JSON.stringify(salvos));
+
+  await pagina.locator('.lista-dias .dia-item').nth(0).click(); await pagina.waitForSelector('text=Checklist final');
+  ok('admin: dia 1 abre com os dados atuais', (await pagina.locator('input[type=text]').first().inputValue()) === fixtures.agenda[0].titulo);
+  ok('admin: checklist do dia 1 tem os itens existentes', (await pagina.locator('.linha-check').count()) === fixtures.conteudo[0].checklist.length);
+  await pagina.locator('input[type=text]').first().fill('Título novo');
+  await pagina.locator('input[type=date]').fill('2026-11-20');
+  await pagina.locator('textarea').nth(1).fill('## Oi\n\n- **a**');   // documento
+  ok('admin: prévia do documento atualiza ao digitar', (await pagina.textContent('.previa h3')) === 'Oi' && (await pagina.locator('.previa li strong').count()) === 1);
+  await pagina.getByRole('button', { name: '+ Adicionar item' }).click();
+  await pagina.locator('.linha-check input[type=text]').last().fill('Fiz a tarefa extra');
+  await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(250);
+  const dia = salvos.find((x) => x.nome === 'admin_salvar_dia')?.corpo.p;
+  ok('admin: salvar envia título, data de Fortaleza e documento', dia?.numero === 1 && dia.titulo === 'Título novo' && dia.libera_em === '2026-11-20T00:00:00-03:00' && dia.documento.startsWith('## Oi'), JSON.stringify(dia));
+  ok('admin: itens antigos do checklist mantêm o id', fixtures.conteudo[0].checklist.every((i, k) => dia.checklist[k].id === i.id), JSON.stringify(dia?.checklist));
+  ok('admin: item novo ganha id próprio', /^fiz_a_tarefa_extra_[a-z0-9]{4}$/.test(dia.checklist.at(-1).id), dia.checklist.at(-1).id);
+  ok('admin: dia continua "pronto" se a caixa estava marcada', dia.em_breve === false);
+  ok('admin: depois de salvar volta para a lista', await pagina.locator('.titulo-admin:has-text("Admin do desafio")').isVisible());
+  ok('admin: sem erros no console', erros.length === 0, erros.join(' | '));
+  await pagina.locator('.lista-dias .dia-item').nth(1).click(); await pagina.waitForSelector('text=Checklist final');
+  await pagina.locator('input[type=text]').first().fill('');
+  await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(150);
+  ok('admin: título vazio é recusado antes de enviar', salvos.filter((x) => x.nome === 'admin_salvar_dia').length === 1 && (await pagina.textContent('.aviso')).includes('título'));
+  await foto(pagina, '8b-admin-dia');
+  await pagina.context().close();
+}
+{
+  const { pagina, salvos, pedidos } = await novaPagina({ admin: false });
+  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.fechado');
+  ok('admin: participante comum vê "Área restrita"', (await pagina.textContent('.fechado')).includes('Área restrita'));
+  ok('admin: participante nem tenta carregar os dados do admin', !pedidos.some((p) => p.includes('admin_dias')) && salvos.length === 0);
+  await pagina.context().close();
+}
+{
+  const { pagina } = await novaPagina({ logada: false });
+  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.login');
+  ok('admin: sem login mostra a tela de login', await pagina.getByRole('button', { name: 'Entrar com Google' }).isVisible());
   await pagina.context().close();
 }
 

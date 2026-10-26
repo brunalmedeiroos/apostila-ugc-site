@@ -27,3 +27,22 @@ export function linkSeguro(url) {
 
 // O story vale até 23h59 do dia em que o dia abriu (horário de Fortaleza).
 export const textoPrazoStory = (liberaEm) => `até 23h59 de ${diaMes(liberaEm)} (horário de Fortaleza)`;
+
+// ---- admin ----
+const formatoData = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+// "2026-11-12" (dia em Fortaleza) a partir do instante guardado no banco; '' se não tem data.
+export const dataFortaleza = (iso) => (iso ? formatoData.format(new Date(iso)) : '');
+
+// Meia-noite de Fortaleza no dia escolhido, para gravar no banco; null se vazio.
+export const paraLiberaEm = (aaaaMmDd) => {
+  if (!aaaaMmDd) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(aaaaMmDd) || Number.isNaN(new Date(`${aaaaMmDd}T00:00:00-03:00`).getTime())) throw new Error('Data inválida.');
+  return `${aaaaMmDd}T00:00:00-03:00`;
+};
+
+// Identificador estável de um item novo do checklist (o texto pode mudar depois, o id não).
+export function novoIdChecklist(texto, aleatorio = Math.random) {
+  const base = String(texto).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24) || 'item';
+  return `${base}_${aleatorio().toString(36).slice(2, 6).padEnd(4, '0')}`;
+}
