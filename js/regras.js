@@ -25,9 +25,6 @@ export function linkSeguro(url) {
   }
 }
 
-// O story vale até 23h59 do dia em que o dia abriu (horário de Fortaleza).
-export const textoPrazoStory = (liberaEm) => `até 23h59 de ${diaMes(liberaEm)} (horário de Fortaleza)`;
-
 // ---- admin ----
 const formatoData = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit' });
 

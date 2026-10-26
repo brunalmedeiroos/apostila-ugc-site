@@ -165,7 +165,7 @@ function telaDia({ db, mostrar, avisar, dia, config }) {
       h('button', { class: 'btn-texto', type: 'button', onclick: () => { addEstude(); marca(); } }, '+ Adicionar link')),
     h('section', { class: 'card secao' }, h('h2', {}, '3. Tarefa do dia'), campo('Texto', tarefa, 'Aceita **negrito**, listas com - e links. Linha em branco separa parágrafos.')),
     h('section', { class: 'card secao' }, h('h2', {}, '4. O que enviar no grupo'), campo('Texto', enviar, 'Aceita **negrito**, listas com - e links. Linha em branco separa parágrafos.'),
-      h('p', { class: 'nota' }, 'A regra de pontos e o prazo do story aparecem sozinhos.')),
+      h('p', { class: 'nota' }, 'Escreva aqui os pontos e o que vale ponto. Nada é acrescentado sozinho.')),
     h('section', { class: 'card secao' }, h('h2', {}, '5. Checklist final'), checkBox,
       h('button', { class: 'btn-texto', type: 'button', onclick: () => { addCheck(); marca(); } }, '+ Adicionar item'),
       h('p', { class: 'nota' }, 'Itens já existentes mantêm o progresso das meninas mesmo se você mudar o texto.')),

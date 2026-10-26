@@ -157,9 +157,6 @@ ul { list-style: none; }
 .links-estudo .sem-link { color: var(--blue-dark); }
 .tempo { font-size: 0.88rem; color: var(--blue-dark); margin-bottom: 14px; font-weight: 600; }
 
-.pontos { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--linha); font-size: 0.92rem; }
-.pontos strong { color: var(--blue-dark); }
-.prazo { margin-top: 10px; font-weight: 600; color: var(--blue-dark); }
 
 .checklist li { border-top: 1px solid var(--linha); }
 .checklist li:first-child { border-top: none; }

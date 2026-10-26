@@ -1,7 +1,7 @@
 // As peças da página de um dia. Usadas pela tela das meninas (app.js) e pela
 // prévia do admin (admin.js), para as duas serem sempre idênticas.
 import { h } from './dom.js';
-import { linkSeguro, textoPrazoStory } from './regras.js';
+import { linkSeguro } from './regras.js';
 import { renderizarDocumento } from './documento.js';
 
 // Texto livre da Bruna (aprender, tarefa, enviar): mesma formatação do documento.
@@ -24,16 +24,11 @@ export function secaoEstude(c) {
 
 export function secaoEnviar(c, dia, config) {
   const url = config?.link_grupo ? linkSeguro(config.link_grupo) : null;
-  const insta = config?.instagram || '@brunalmedeiroos';
   return secao('O que enviar no grupo',
     texto(c.enviar),
     url
       ? h('a', { class: 'btn btn-primario', href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o grupo')
-      : h('span', { class: 'btn', 'aria-disabled': 'true' }, 'Link do grupo em breve'),
-    h('div', { class: 'pontos' },
-      h('p', {}, 'Enviar no grupo a prova do dia vale ', h('strong', {}, '1 ponto'), '.'),
-      h('p', {}, `Postar um story marcando ${insta} vale `, h('strong', {}, '+1 ponto de bônus'), '.'),
-      h('p', { class: 'prazo' }, dia.libera_em ? `Prazo do story: ${textoPrazoStory(dia.libera_em)}.` : 'Prazo do story: defina a data de abertura do dia.')));
+      : h('span', { class: 'btn', 'aria-disabled': 'true' }, 'Link do grupo em breve'));
 }
 
 export function secaoChecklist(c, marcados, aoMarcar) {

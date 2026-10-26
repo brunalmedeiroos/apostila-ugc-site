@@ -125,10 +125,7 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   ok('dia 1: 4 itens de estudo, carrossel sem link', (await pagina.locator('.links-estudo li').count()) === 4 && (await pagina.textContent('.sem-link')).includes('link em breve'));
   ok('dia 1: links externos com noopener', (await pagina.locator('.links-estudo a[rel="noopener noreferrer"]').count()) === 3);
   ok('dia 1: botão abre o grupo da config', (await pagina.getAttribute('a:has-text("Abrir o grupo")', 'href')) === 'https://chat.whatsapp.com/exemplo');
-  const pontos = await pagina.textContent('.pontos');
-  ok('dia 1: regra de pontos e @', pontos.includes('1 ponto') && pontos.includes('+1 ponto de bônus') && pontos.includes('@brunalmedeiroos'));
-  const hoje1 = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Fortaleza', day: '2-digit', month: '2-digit' }).format(new Date(agenda[0].libera_em));
-  ok('dia 1: prazo do story = 23h59 do dia da liberação', pontos.includes(`até 23h59 de ${hoje1} (horário de Fortaleza)`), pontos);
+  ok('dia 1: nenhum bloco de pontos é acrescentado sozinho', (await pagina.locator('.pontos, .prazo').count()) === 0 && !(await pagina.textContent('main')).includes('+1 ponto'));
   ok('dia 1: "Anterior" não existe, "Próximo" abre o dia 2', (await pagina.locator('.navegacao .ant').count()) === 0 && (await pagina.getAttribute('.navegacao .prox', 'href')) === '#/dia/2');
   ok('dia 1: checklist com 5 itens, 1 opcional', (await pagina.locator('.check').count()) === 5 && (await pagina.locator('.opcional').count()) === 1);
   await pagina.getByLabel(PRIMEIRO_ITEM).check();
@@ -193,7 +190,7 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
 {
   const enviar = 'Para concluir sua missão:\n- **A marca:** nome ou @\n- **Sua ideia:** uma frase\n\n**Vale até 20 pontos!** Não precisa gravar.\nSegunda linha <b>x</b>';
   const { pagina, erros } = await novaPagina({ enviarDia1: enviar });
-  await pagina.goto(url('#/dia/1')); await pagina.waitForSelector('.pontos');
+  await pagina.goto(url('#/dia/1')); await pagina.waitForSelector('.documento');
   const secaoEnviar = pagina.locator('section:has(h2:text("O que enviar no grupo")) .documento');
   ok('texto livre: a lista vira lista de verdade (2 itens)', (await secaoEnviar.locator('li').count()) === 2);
   ok('texto livre: **negrito** destacado, sem asteriscos na tela', (await secaoEnviar.locator('strong').count()) === 3 && !(await secaoEnviar.textContent()).includes('**'));
@@ -229,7 +226,7 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   const titulosPrevia = await pagina.locator('.previa-dia h2').allTextContents();
   ok('admin: prévia mostra o dia inteiro, 5 seções na ordem que as meninas veem', JSON.stringify(titulosPrevia) === JSON.stringify(['O que você vai aprender hoje', 'Estude', 'Tarefa do dia', 'O que enviar no grupo', 'Checklist final']), titulosPrevia.join(' > '));
   ok('admin: prévia mostra título, documento formatado e item novo do checklist', (await pagina.textContent('.previa-dia .cabeca-dia h1')) === 'Título novo' && (await pagina.locator('.previa-dia .documento h3').textContent()) === 'Oi' && (await pagina.locator('.previa-dia .check').count()) === fixtures.conteudo[0].checklist.length + 1);
-  ok('admin: prévia calcula o prazo do story pela data escolhida', (await pagina.textContent('.previa-dia .prazo')).includes('até 23h59 de 20/11'));
+  ok('admin: prévia também não acrescenta pontos sozinha', (await pagina.locator('.previa-dia .pontos, .previa-dia .prazo').count()) === 0);
   ok('admin: prévia não salva nada', !salvos.some((x) => x.nome === 'admin_salvar_dia'));
   await foto(pagina, '8c-admin-previa');
   await pagina.getByRole('button', { name: 'Salvar dia' }).click(); await pagina.waitForTimeout(250);
