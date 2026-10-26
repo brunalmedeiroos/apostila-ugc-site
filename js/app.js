@@ -71,7 +71,7 @@ function telaLogin() {
       h('div', { class: 'card' },
         h('p', {}, 'Entre com a sua conta Google. Sem senha e sem e-mail para esperar.'),
         botao,
-        h('p', { class: 'privacidade' }, 'Só o seu e-mail é guardado, e ele serve só para o seu acesso.'),
+        h('p', { class: 'privacidade' }, 'Só o seu e-mail é guardado, e ele serve só para o seu acesso. ', h('a', { href: 'privacidade.html' }, 'Política de privacidade')),
       ),
     ),
   );

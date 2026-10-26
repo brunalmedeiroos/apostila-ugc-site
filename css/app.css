@@ -193,3 +193,11 @@ ul { list-style: none; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ---------- Página de privacidade ---------- */
+.texto-legal h1 { font-size: 1.7rem; margin-bottom: 8px; }
+.texto-legal h2 { font-size: 1.1rem; margin: 24px 0 8px; }
+.texto-legal p + p, .texto-legal ul + p, .texto-legal p + ul { margin-top: 10px; }
+.texto-legal ul { padding-left: 20px; list-style: disc; }
+.texto-legal li + li { margin-top: 6px; }
+.texto-legal .atualizado { font-size: 0.85rem; color: var(--blue-dark); }
