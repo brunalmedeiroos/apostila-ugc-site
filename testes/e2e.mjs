@@ -65,7 +65,7 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   const { pagina, pedidos, erros } = await novaPagina({ logada: false });
   await pagina.goto(url()); await pagina.waitForSelector('.login');
   ok('login: mostra botão do Google', await pagina.getByRole('button', { name: 'Entrar com Google' }).isVisible());
-  ok('login: mostra aviso de privacidade', (await pagina.textContent('.privacidade')).includes('Só o seu e-mail é guardado'));
+  ok('login: mostra aviso de privacidade', (await pagina.textContent('.privacidade')).includes('Usamos só o seu e-mail'));
   ok('login: não pede senha nem campo de e-mail', (await pagina.locator('input').count()) === 0);
   ok('login: não consulta nenhuma tabela sem sessão', !pedidos.some((p) => p.includes('/rest/v1/')), pedidos.join(','));
   ok('login: sem erros no console', erros.length === 0, erros.join(' | '));

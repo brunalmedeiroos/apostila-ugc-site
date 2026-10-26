@@ -57,7 +57,7 @@ function telaLogin() {
     botao.disabled = true;
     const { error } = await db.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: location.origin + location.pathname, scopes: 'email' },
+      options: { redirectTo: location.origin + location.pathname },
     });
     if (error) {
       botao.disabled = false;
@@ -71,7 +71,7 @@ function telaLogin() {
       h('div', { class: 'card' },
         h('p', {}, 'Entre com a sua conta Google. Sem senha e sem e-mail para esperar.'),
         botao,
-        h('p', { class: 'privacidade' }, 'Só o seu e-mail é guardado, e ele serve só para o seu acesso. ', h('a', { href: 'privacidade.html' }, 'Política de privacidade')),
+        h('p', { class: 'privacidade' }, 'Usamos só o seu e-mail, e só para o seu acesso. O Google também envia nome e foto, mas não usamos nem mostramos. ', h('a', { href: 'privacidade.html' }, 'Política de privacidade')),
       ),
     ),
   );
