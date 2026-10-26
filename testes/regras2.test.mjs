@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { idYoutube, urlEmbedYoutube, lerRanking, posicoesRanking } from '../js/regras.js';
+import { idYoutube, urlEmbedYoutube, progressoGeral, agruparPorEtapa, nomeDaEtapa } from '../js/regras.js';
 
 const ID = 'dQw4w9WgXcQ';
 test('YouTube: reconhece os jeitos de copiar o link', () => {
@@ -17,31 +17,31 @@ test('YouTube: a URL de incorporação usa o domínio de privacidade aprimorada'
   assert.equal(urlEmbedYoutube(ID), `https://www.youtube-nocookie.com/embed/${ID}`);
 });
 
-test('ranking: vários jeitos de colar', () => {
-  const { linhas, ignoradas } = lerRanking('Ana 40\nBia - 35\nCaro: 30 pts\n1. Dani 28\n2º Eli 20 pontos\n#3 Fê 10\nGabi\t18\n4\tHeloísa\t15\t3\n');
-  assert.deepEqual(linhas.map((l) => [l.apelido, l.pontos]), [['Ana', 40], ['Bia', 35], ['Caro', 30], ['Dani', 28], ['Eli', 20], ['Fê', 10], ['Gabi', 18], ['Heloísa', 15]]);
-  assert.equal(ignoradas.length, 0);
+const c1 = { numero: 1, em_breve: false, checklist: [{ id: 'a' }, { id: 'b' }, { id: 'c', opcional: true }] };
+const c2 = { numero: 2, em_breve: false, checklist: [{ id: 'x' }] };
+const cBreve = { numero: 3, em_breve: true, checklist: [] };
+
+test('progresso: conta só itens obrigatórios dos dias prontos', () => {
+  const marcados = new Map([['1:a', true], ['1:b', true], ['1:c', true]]);
+  assert.deepEqual(progressoGeral([c1, c2, cBreve], marcados), { total: 3, feitos: 2, dias: 1, pct: 67 });
 });
-test('ranking: milhar com ponto, negativos e apelidos com números', () => {
-  const { linhas } = lerRanking('Lu 1.250\nMa -5\nAna 2 30');
-  assert.deepEqual(linhas.map((l) => [l.apelido, l.pontos]), [['Lu', 1250], ['Ma', -5], ['Ana 2', 30]]);
+test('progresso: nada marcado, nada pronto e lista vazia não quebram', () => {
+  assert.deepEqual(progressoGeral([c1], new Map()), { total: 2, feitos: 0, dias: 0, pct: 0 });
+  assert.deepEqual(progressoGeral([cBreve, undefined], new Map()), { total: 0, feitos: 0, dias: 0, pct: 0 });
+  assert.deepEqual(progressoGeral([], new Map()), { total: 0, feitos: 0, dias: 0, pct: 0 });
 });
-test('ranking: cabeçalho e linhas sem número são separados, não inventados', () => {
-  const { linhas, ignoradas } = lerRanking('Posição\tNome\tPontos\n1\tAna\t40\nSó um nome\n12,5 pontos de nada\n');
-  assert.deepEqual(linhas.map((l) => l.apelido), ['Ana']);
-  assert.ok(ignoradas.some((i) => i.linha === 'Só um nome'));
+test('progresso: marcar item opcional sozinho não conta', () => {
+  assert.equal(progressoGeral([c1], new Map([['1:c', true]])).feitos, 0);
 });
-test('ranking: apelido grande demais é recusado', () => {
-  const { linhas, ignoradas } = lerRanking(`${'a'.repeat(61)} 10`);
-  assert.equal(linhas.length, 0);
-  assert.equal(ignoradas[0].motivo, 'apelido com mais de 60 letras');
+test('etapas: agrupa os dias, ignora dia que não existe e põe o resto em "Outros"', () => {
+  const agenda = [1, 2, 3, 4].map((numero) => ({ numero, titulo: `D${numero}` }));
+  const g = agruparPorEtapa(agenda, [{ nome: 'A', dias: [1, 2, 99] }, { nome: 'Vazia', dias: [77] }]);
+  assert.deepEqual(g.map((x) => [x.nome, x.dias.map((d) => d.numero)]), [['A', [1, 2]], ['Outros', [3, 4]]]);
+  assert.deepEqual(agruparPorEtapa(agenda, undefined).map((x) => x.nome), ['Outros']);
 });
-test('ranking: HTML digitado é só texto', () => {
-  const { linhas } = lerRanking('<b>Ana</b> 10');
-  assert.equal(linhas[0].apelido, '<b>Ana</b>');
-});
-test('posições: empate divide a posição e mantém a ordem colada', () => {
-  const p = posicoesRanking([{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { apelido: 'Ana', pontos: 20 }, { apelido: 'Zé', pontos: 35 }]);
-  assert.deepEqual(p.map((x) => [x.apelido, x.posicao]), [['Lu', 1], ['Bia', 1], ['Zé', 3], ['Ana', 4]]);
-  assert.deepEqual(posicoesRanking([]), []);
+test('etapas: nome da etapa de um dia', () => {
+  const e = [{ nome: 'A', dias: [1, 2] }, { nome: 'B', dias: [3] }];
+  assert.equal(nomeDaEtapa(3, e), 'B');
+  assert.equal(nomeDaEtapa(9, e), '');
+  assert.equal(nomeDaEtapa(1, undefined), '');
 });

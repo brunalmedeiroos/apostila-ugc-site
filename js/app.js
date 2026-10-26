@@ -1,7 +1,6 @@
-import { diaMes, estaAberto, concluido } from './regras.js';
+import { diaMes, estaAberto, concluido, progressoGeral, agruparPorEtapa, nomeDaEtapa } from './regras.js';
 import { h } from './dom.js';
 import { cabecaDoDia, corpoDoDia } from './dia-view.js';
-import { cartaoRanking } from './ranking-view.js';
 
 const cfg = window.APOSTILA_CONFIG;
 const TOTAL = cfg.totalDias;
@@ -56,6 +55,7 @@ function avisar(texto, erro = false) {
 
 // ---------- login ----------
 function telaLogin() {
+  desenharMenu(null);
   const botao = h('button', { class: 'btn btn-primario btn-bloco', type: 'button' }, 'Entrar com Google');
   botao.addEventListener('click', async () => {
     erroLogin = null;
@@ -102,41 +102,86 @@ async function carregarTudo() {
 const diaAgenda = (n) => estado.agenda.find((d) => d.numero === n);
 const diaConcluido = (n) => concluido(estado.conteudo.get(n), estado.marcados);
 
-// ---------- lista de dias ----------
-function anel(feitos) {
-  const r = 40;
-  const c = 2 * Math.PI * r;
-  return svg('svg', { class: 'anel', viewBox: '0 0 100 100', role: 'img', 'aria-label': `${feitos} de ${TOTAL} dias concluídos` },
-    svg('circle', { class: 'trilho', cx: '50', cy: '50', r }),
-    svg('circle', { class: 'barra', cx: '50', cy: '50', r, 'stroke-dasharray': c, 'stroke-dashoffset': c * (1 - feitos / TOTAL) }),
-    svg('text', { x: '50', y: '50' }, `${feitos}/${TOTAL}`));
+// ---------- menu lateral e tela inicial ----------
+const corpo_ = document.body;
+const menuEl = document.getElementById('menu');
+const topoTitulo = document.getElementById('topbar-titulo');
+const topoProg = document.getElementById('topbar-prog');
+const btnMenu = document.getElementById('btn-menu');
+
+function menuAberto(aberto) {
+  corpo_.classList.toggle('menu-aberto', aberto);
+  btnMenu.setAttribute('aria-expanded', String(aberto));
+}
+btnMenu.addEventListener('click', () => menuAberto(!corpo_.classList.contains('menu-aberto')));
+document.getElementById('menu-fundo').addEventListener('click', () => menuAberto(false));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menuAberto(false); });
+
+const progresso = () => progressoGeral([...estado.conteudo.values()], estado.marcados);
+
+function desenharMenu(rotaDia) {
+  corpo_.classList.toggle('com-menu', Boolean(estado.sessao));
+  if (!estado.sessao) { menuEl.replaceChildren(); return; }
+  const p = progresso();
+  const grupos = agruparPorEtapa(estado.agenda, cfg.etapas);
+  const barra = h('progress', { class: 'prog-barra', max: 100, value: p.pct, 'aria-label': 'Progresso' });
+
+  const blocos = grupos.map((g) => h('div', { class: 'menu-grupo' },
+    h('p', { class: 'menu-etapa' }, g.nome),
+    g.dias.map((d) => {
+      const aberto = estaAberto(d.libera_em);
+      const ok = diaConcluido(d.numero);
+      const lado = ok ? iconeCheck() : aberto ? '' : iconeCadeado();
+      const dica = !aberto ? (d.libera_em ? `abre ${diaMes(d.libera_em)}` : 'em breve') : '';
+      const conteudo = [
+        h('span', { class: 'menu-num' }, String(d.numero)),
+        h('span', { class: 'menu-titulo' }, d.titulo, dica ? h('small', {}, dica) : null),
+        h('span', { class: 'menu-lado' }, lado),
+      ];
+      const ativo = rotaDia === d.numero ? ' ativo' : '';
+      return aberto
+        ? h('a', { class: `menu-item${ok ? ' concluido' : ''}${ativo}`, href: `#/dia/${d.numero}`, 'aria-current': rotaDia === d.numero ? 'page' : null }, conteudo)
+        : h('div', { class: 'menu-item fechado-item', 'aria-disabled': 'true' }, conteudo);
+    })));
+
+  menuEl.replaceChildren(
+    h('p', { class: 'marca' }, 'Bru Medeiros'),
+    h('a', { class: 'menu-titulo-app', href: '#/' }, cfg.nomeDesafio),
+    h('div', { class: 'prog' },
+      h('p', { class: 'prog-pct' }, `${p.pct}%`),
+      barra,
+      h('p', { class: 'prog-texto' }, `${p.feitos} de ${p.total} marcados`)),
+    h('nav', { class: 'menu-nav', 'aria-label': 'Dias do desafio' }, blocos),
+    h('div', { class: 'menu-rodape' },
+      h('button', { class: 'btn-texto', type: 'button', onclick: () => window.print() }, 'Salvar em PDF'),
+      botaoSair(),
+      h('a', { class: 'btn-texto', href: 'privacidade.html' }, 'Privacidade')));
+
+  topoTitulo.textContent = rotaDia ? `Dia ${rotaDia} de ${TOTAL}` : 'Início';
+  topoProg.textContent = `${p.pct}%`;
 }
 
-function telaLista() {
-  const feitos = estado.agenda.filter((d) => diaConcluido(d.numero)).length;
-  const itens = estado.agenda.map((d) => {
-    const aberto = estaAberto(d.libera_em);
-    const ok = diaConcluido(d.numero);
-    const icone = ok ? iconeCheck() : aberto ? String(d.numero) : iconeCadeado();
-    const lado = ok ? 'Concluído' : aberto ? '' : d.libera_em ? `abre dia ${diaMes(d.libera_em)}` : 'em breve';
-    const corpo = [
-      h('span', { class: 'dia-icone' }, icone),
-      h('span', { class: 'dia-texto' }, h('span', { class: 'dia-num' }, `Dia ${d.numero}`), h('span', { class: 'dia-titulo' }, d.titulo)),
-      h('span', { class: 'dia-lado' }, lado),
-    ];
-    return aberto
-      ? h('a', { class: `dia-item${ok ? ' concluido' : ''}`, href: `#/dia/${d.numero}` }, corpo)
-      : h('div', { class: 'dia-item', 'aria-disabled': 'true' }, corpo);
-  });
+function proximoDia() {
+  return estado.agenda.find((d) => estaAberto(d.libera_em) && !diaConcluido(d.numero)) ?? null;
+}
+
+function telaInicio() {
+  const p = progresso();
+  const prox = proximoDia();
+  const algumAberto = estado.agenda.some((d) => estaAberto(d.libera_em));
+  const acao = prox
+    ? h('a', { class: 'btn btn-primario btn-bloco', href: `#/dia/${prox.numero}` }, `${p.feitos ? 'Continuar no' : 'Começar pelo'} Dia ${prox.numero}`)
+    : h('p', { class: 'nota' }, algumAberto ? 'Você está em dia com tudo que já abriu. O próximo dia abre em breve.' : 'O primeiro dia ainda não abriu. Volte aqui quando chegar a data.');
   mostrar(
-    h('div', { class: 'topo' }, h('p', { class: 'marca' }, 'Bru Medeiros'), botaoSair()),
-    h('section', { class: 'card resumo' }, anel(feitos),
-      h('div', {}, h('h1', {}, cfg.nomeDesafio), h('p', {}, feitos === 0 ? 'Vamos começar juntas?' : `${feitos} de ${TOTAL} dias concluídos.`))),
-    estado.config?.ranking_visivel
-      ? h('a', { class: 'card ranking-link', href: '#/ranking' }, h('span', { class: 'dia-titulo' }, 'Ranking'), h('span', { class: 'dia-lado' }, 'Ver'))
-      : null,
-    h('nav', { class: 'card lista-dias', 'aria-label': 'Dias do desafio' }, itens),
-  );
+    h('p', { class: 'etiqueta' }, 'Comece aqui'),
+    h('h1', {}, cfg.nomeDesafio),
+    h('p', { class: 'lead' }, cfg.boasVindas),
+    h('section', { class: 'card' },
+      h('h2', {}, 'Seu progresso'),
+      h('progress', { class: 'prog-barra', max: 100, value: p.pct, 'aria-label': 'Progresso' }),
+      h('p', { class: 'prog-texto' }, `${p.feitos} de ${p.total} marcados · ${p.dias} de ${TOTAL} dias concluídos`),
+      acao));
+  desenharMenu(null);
 }
 
 function botaoSair() {
@@ -158,29 +203,18 @@ async function marcar(dia, item, caixa) {
   }
 }
 
-async function telaRanking() {
-  const voltar = h('a', { class: 'btn-texto voltar', href: '#/' }, '← Todos os dias');
-  if (!estado.config?.ranking_visivel) {
-    return mostrar(voltar, h('section', { class: 'card fechado' }, h('h1', {}, 'O ranking ainda não abriu'), h('p', {}, 'Quando ele abrir, aparece aqui.')));
-  }
-  mostrar(voltar, h('p', { class: 'carregando' }, 'Carregando…'));
-  const { data, error } = await db.from('ranking').select('apelido,pontos,ordem').order('ordem');
-  if (error) return mostrar(voltar, h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, 'Não consegui carregar o ranking. Tente de novo.')));
-  mostrar(voltar, h('h1', { class: 'titulo-admin' }, 'Ranking'), cartaoRanking(data, estado.config.ranking_atualizado_em));
-}
-
 function telaDia(n) {
   const dia = diaAgenda(n);
-  if (!dia) return telaLista();
-  const voltar = h('a', { class: 'btn-texto voltar', href: '#/' }, '← Todos os dias');
+  if (!dia) return telaInicio();
   const c = estado.conteudo.get(n);
 
   if (!estaAberto(dia.libera_em) || !c) {
-    return mostrar(voltar, h('section', { class: 'card fechado' },
+    mostrar(h('section', { class: 'card fechado' },
       h('span', { class: 'dia-icone' }, iconeCadeado()),
       h('h1', {}, `Dia ${n} ainda está fechado`),
       h('p', {}, dia.libera_em ? `Ele abre dia ${diaMes(dia.libera_em)}.` : 'Ele abre em breve.'),
-      h('a', { class: 'btn', href: '#/' }, 'Ver os outros dias')));
+      h('a', { class: 'btn', href: '#/' }, 'Voltar ao início')));
+    return desenharMenu(null);
   }
 
   const anterior = n > 1 ? h('a', { class: 'btn ant', href: `#/dia/${n - 1}` }, '← Anterior') : h('span');
@@ -190,24 +224,26 @@ function telaDia(n) {
     : proxAberto ? h('a', { class: 'btn btn-primario prox', href: `#/dia/${n + 1}` }, 'Próximo →')
     : h('span', { class: 'btn prox', 'aria-disabled': 'true' }, proxDia.libera_em ? `Abre dia ${diaMes(proxDia.libera_em)}` : 'Em breve');
 
-  const cabeca = cabecaDoDia(n, dia.titulo, TOTAL);
+  const cabeca = cabecaDoDia(n, dia.titulo, TOTAL, nomeDaEtapa(n, cfg.etapas));
   const corpo = corpoDoDia(c, dia, estado.config, estado.marcados, marcar);
 
-  mostrar(voltar, cabeca, ...corpo, h('nav', { class: 'navegacao', 'aria-label': 'Navegar entre os dias' }, anterior, proximo));
+  mostrar(cabeca, ...corpo, h('nav', { class: 'navegacao', 'aria-label': 'Navegar entre os dias' }, anterior, proximo));
+  desenharMenu(n);
   raiz.focus({ preventScroll: true });
 }
 
 // ---------- roteamento ----------
 function rotear() {
+  menuAberto(false);
   if (location.hash.startsWith('#/admin')) {
+    corpo_.classList.remove('com-menu');
     if (!estado.sessao) { try { sessionStorage.setItem('apostila_vai_admin', '1'); } catch { /* sem armazenamento: tudo bem */ } return telaLogin(); }
     return import('./admin.js').then((m) => m.abrirAdmin({ db, mostrar, avisar, rota: location.hash }))
       .catch((e) => { console.error(e); avisar('Não consegui abrir o admin.', true); });
   }
   if (!estado.sessao) return telaLogin();
-  if (location.hash === '#/ranking') return telaRanking();
   const m = location.hash.match(/^#\/dia\/(\d+)$/);
-  return m ? telaDia(Number(m[1])) : telaLista();
+  return m ? telaDia(Number(m[1])) : telaInicio();
 }
 
 async function iniciar(sessao) {

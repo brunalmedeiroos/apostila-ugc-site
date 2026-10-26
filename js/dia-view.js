@@ -51,8 +51,10 @@ export function secaoChecklist(c, marcados, aoMarcar) {
     h('p', { class: 'nota' }, 'Isso é só para você se organizar. Não é prova.'));
 }
 
-export const cabecaDoDia = (n, titulo, total) =>
-  h('header', { class: 'cabeca-dia' }, h('span', { class: 'dia-num' }, `Dia ${n} de ${total}`), h('h1', {}, titulo));
+export const cabecaDoDia = (n, titulo, total, etapa) =>
+  h('header', { class: 'cabeca-dia' },
+    h('span', { class: 'dia-num' }, [`Dia ${String(n).padStart(2, '0')} de ${total}`, etapa].filter(Boolean).join(' · ')),
+    h('h1', {}, titulo));
 
 // As seções do dia, na ordem. `c` é o conteúdo; `dia` tem titulo e libera_em.
 export function corpoDoDia(c, dia, config, marcados, aoMarcar) {

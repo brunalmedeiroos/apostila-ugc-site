@@ -19,6 +19,8 @@ const abertos = new Set(agenda.filter((a) => a.libera_em && new Date(a.libera_em
 const server = await servir();
 const browser = await chromium.launch();
 
+const fora = async (pg) => (await pg.locator('#menu').boundingBox()).x + (await pg.locator('#menu').boundingBox()).width <= 1;
+
 async function novaPagina({ logada = true, progressoInicial = [], falhaGravar = false, admin = false, documentoDia1 = null, enviarDia1 = null, videoDia1 = null, ranking = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Fortaleza' });
   const pagina = await ctx.newPage();
@@ -100,22 +102,53 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   await pagina.context().close();
 }
 
-// ---- 2. Lista ----
+// ---- 2. Início e menu lateral ----
 {
   const { pagina, erros } = await novaPagina({ progressoInicial: [
     ...fixtures.conteudo[0].checklist.filter((i) => !i.opcional).map((i) => i.id).map((item) => ({ dia: 1, item, marcado: true })) ] });
-  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
-  const itens = pagina.locator('.dia-item');
-  ok('lista: 15 dias', (await itens.count()) === 15);
-  ok('lista: dia 1 concluído (story é opcional)', (await itens.nth(0).textContent()).includes('Concluído'));
-  ok('lista: dia 2 aberto e clicável', (await itens.nth(1).evaluate((e) => e.tagName)) === 'A');
-  ok('lista: dia 4 bloqueado com "abre dia dd/mm"', /abre dia \d\d\/\d\d/.test(await itens.nth(3).textContent()) && (await itens.nth(3).getAttribute('aria-disabled')) === 'true');
-  ok('lista: dia sem data mostra "em breve"', (await itens.nth(14).textContent()).includes('em breve'));
-  ok('lista: anel 1/15', (await pagina.getAttribute('.anel', 'aria-label')) === '1 de 15 dias concluídos');
-  const soltos = await pagina.evaluate(() => { const r = []; const w = document.createTreeWalker(document.querySelector('main'), NodeFilter.SHOW_TEXT); while (w.nextNode()) { const t = w.currentNode.textContent.trim(); if (t === 'null' || t === 'undefined' || t === 'false') r.push(t); } return r; });
-  ok('lista: nenhum texto solto "null", "undefined" ou "false" na tela', soltos.length === 0, JSON.stringify(soltos));
-  ok('lista: sem erros no console', erros.length === 0, erros.join(' | '));
-  await foto(pagina, '2-lista');
+  await pagina.goto(url()); await pagina.waitForSelector('.menu-item', { state: 'attached' });
+  const itens = pagina.locator('.menu-item');
+  ok('menu: 15 dias', (await itens.count()) === 15);
+  const etapas = await pagina.locator('.menu-etapa').allTextContents();
+  ok('menu: dias agrupados por etapas, na ordem', JSON.stringify(etapas) === JSON.stringify(['Comece aqui', 'Observar e planejar', 'Preparar e gravar', 'Fotos e edição', 'Portfólio e entrega']), etapas.join(' | '));
+  ok('menu: dia 1 concluído (story é opcional)', (await itens.nth(0).getAttribute('class')).includes('concluido'));
+  ok('menu: dia 2 aberto e clicável', (await itens.nth(1).evaluate((e) => e.tagName)) === 'A');
+  ok('menu: dia 4 bloqueado com "abre dd/mm"', /abre \d\d\/\d\d/.test(await itens.nth(3).textContent()) && (await itens.nth(3).getAttribute('aria-disabled')) === 'true');
+  ok('menu: dia sem data mostra "em breve"', (await itens.nth(14).textContent()).includes('em breve'));
+  const obrig = fixtures.conteudo[0].checklist.filter((i) => !i.opcional).length;
+  ok('menu: progresso em porcentagem e "X de Y marcados"', (await pagina.textContent('.menu .prog-pct')) === '100%' && (await pagina.textContent('.menu .prog-texto')) === `${obrig} de ${obrig} marcados`, await pagina.textContent('.menu .prog-texto'));
+  ok('início: "Comece aqui", boas-vindas e botão para o próximo dia', (await pagina.textContent('.etiqueta')) === 'Comece aqui' && (await pagina.textContent('.lead')).includes('Vamos descobrir') && (await pagina.getByRole('link', { name: /Continuar no Dia 2/ }).count()) === 1);
+  const soltos = await pagina.evaluate(() => { const r = []; const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (w.nextNode()) { const t = w.currentNode.textContent.trim(); if (t === 'null' || t === 'undefined' || t === 'false') r.push(t); } return r; });
+  ok('início: nenhum texto solto "null", "undefined" ou "false" na tela', soltos.length === 0, JSON.stringify(soltos));
+  ok('início: sem erros no console', erros.length === 0, erros.join(' | '));
+  await foto(pagina, '2-inicio-celular');
+  await pagina.context().close();
+}
+{
+  // celular: o menu abre e fecha
+  const { pagina } = await novaPagina({});
+  await pagina.goto(url()); await pagina.waitForSelector('.topbar', { state: 'visible' });
+  ok('celular: menu começa fechado e há um botão "Menu" no topo', !(await pagina.locator('body').getAttribute('class')).includes('menu-aberto') && await pagina.getByRole('button', { name: 'Menu' }).isVisible() && await fora(pagina));
+  await pagina.getByRole('button', { name: 'Menu' }).click(); await pagina.waitForTimeout(350);
+  ok('celular: tocar em "Menu" abre a lista de dias', !(await fora(pagina)) && (await pagina.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded')) === 'true');
+  await foto(pagina, '2b-menu-aberto-celular');
+  await pagina.locator('a.menu-item').first().click(); await pagina.waitForSelector('.cabeca-dia'); await pagina.waitForTimeout(350);
+  ok('celular: escolher um dia abre o dia e fecha o menu', !(await pagina.locator('body').getAttribute('class')).includes('menu-aberto') && await fora(pagina));
+  await pagina.getByRole('button', { name: 'Menu' }).click(); await pagina.waitForTimeout(300);
+  await pagina.keyboard.press('Escape'); await pagina.waitForTimeout(300);
+  ok('celular: a tecla Esc fecha o menu', !(await pagina.locator('body').getAttribute('class')).includes('menu-aberto'));
+  await pagina.context().close();
+}
+{
+  // computador: menu fixo na lateral, sem botão "Menu"
+  const { pagina } = await novaPagina({});
+  await pagina.setViewportSize({ width: 1280, height: 800 });
+  await pagina.goto(url()); await pagina.waitForSelector('.menu-item', { state: 'attached' });
+  ok('computador: menu fica fixo na lateral e não há botão "Menu"', !(await fora(pagina)) && !(await pagina.locator('.topbar').isVisible()));
+  ok('computador: botão "Salvar em PDF" no menu', await pagina.getByRole('button', { name: 'Salvar em PDF' }).isVisible());
+  await foto(pagina, '2c-inicio-computador');
+  await pagina.locator('a.menu-item').first().click(); await pagina.waitForSelector('.cabeca-dia');
+  await foto(pagina, '3b-dia-computador');
   await pagina.context().close();
 }
 
@@ -287,30 +320,7 @@ const foto = async (p, nome) => capturas && p.screenshot({ path: `${capturas}/${
   await pagina.context().close();
 }
 
-// ---- 10. Ranking para as meninas ----
-const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { apelido: 'Ana', pontos: 20 }, { apelido: '<b>Zé</b>', pontos: 35 }];
-{
-  const { pagina } = await novaPagina({ ranking: { visivel: false, linhas: RANK } });
-  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
-  ok('ranking oculto: nenhum atalho na lista', (await pagina.locator('.ranking-link').count()) === 0);
-  await pagina.goto(url('#/ranking')); await pagina.waitForSelector('.fechado');
-  ok('ranking oculto: abrir pela URL mostra "ainda não abriu" e nenhuma linha', (await pagina.textContent('.fechado')).includes('ainda não abriu') && (await pagina.locator('.rank-item').count()) === 0);
-  await pagina.context().close();
-}
-{
-  const { pagina, erros } = await novaPagina({ ranking: { visivel: true, linhas: RANK } });
-  await pagina.goto(url()); await pagina.waitForSelector('.ranking-link');
-  await pagina.locator('.ranking-link').click(); await pagina.waitForSelector('.rank-item');
-  const itens = await pagina.locator('.rank-item').allTextContents();
-  ok('ranking visível: ordem por pontos, empate divide a posição', JSON.stringify(itens) === JSON.stringify(['1ºLu40 pts', '1ºBia40 pts', '3º<b>Zé</b>35 pts', '4ºAna20 pts']), JSON.stringify(itens));
-  ok('ranking visível: HTML no apelido aparece como texto', (await pagina.locator('.rank-lista b').count()) === 0);
-  ok('ranking visível: mostra quando foi atualizado em Fortaleza', (await pagina.textContent('.rank-quando')).includes('26/10 às 14:30'));
-  ok('ranking visível: sem erros no console', erros.length === 0, erros.join(' | '));
-  await foto(pagina, '10-ranking');
-  await pagina.context().close();
-}
-
-// ---- 11. Admin: vídeo e ranking ----
+// ---- 11. Admin: vídeo ----
 {
   const { pagina, salvos } = await novaPagina({ admin: true, videoDia1: 'dQw4w9WgXcQ' });
   await pagina.goto(url('#/admin/dia/1')); await pagina.waitForSelector('text=Checklist final');
@@ -327,40 +337,13 @@ const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { a
   ok('admin vídeo: link falso NÃO é enviado ao servidor', salvos.length === antes);
   await pagina.context().close();
 }
-{
-  const { pagina, salvos } = await novaPagina({ admin: true, ranking: { visivel: false, linhas: [{ apelido: 'Velha', pontos: 1 }] } });
-  await pagina.goto(url('#/admin')); await pagina.waitForSelector('.ranking-link');
-  await pagina.locator('.ranking-link:has-text("Ranking")').click(); await pagina.waitForSelector('text=Cole o ranking');
-  ok('admin ranking: abre com a lista já publicada', (await pagina.locator('.linha-rank').count()) === 1);
-  pagina.on('dialog', (d) => d.accept());
-  await pagina.locator('textarea').fill('Lu 40\nBia - 40\n1. Ana 20 pts\nlinha sem número');
-  await pagina.getByRole('button', { name: 'Ler a lista colada' }).click();
-  await pagina.waitForFunction(() => document.querySelectorAll('.linha-rank').length === 3);
-  ok('admin ranking: leu 3 linhas e avisou da que não entendeu', (await pagina.textContent('.nota:has-text("Li 3")')).includes('linha sem número'));
-  const posicoes = await pagina.locator('.linha-rank .rank-pos').allTextContents();
-  ok('admin ranking: mostra as posições com empate', JSON.stringify(posicoes) === JSON.stringify(['1º', '1º', '3º']), JSON.stringify(posicoes));
-  await pagina.locator('.linha-rank input[type=number]').nth(2).fill('50');
-  await pagina.waitForFunction(() => document.querySelector('.linha-rank .rank-pos:last-of-type') && [...document.querySelectorAll('.linha-rank .rank-pos')].at(-1).textContent === '1º');
-  ok('admin ranking: editar os pontos recalcula a posição na hora', true);
-  ok('admin ranking: a prévia mostra como as meninas veem', (await pagina.locator('.previa-dia .rank-item').count()) === 3);
-  await pagina.locator('.check input').check();
-  await pagina.getByRole('button', { name: 'Publicar ranking' }).click(); await pagina.waitForTimeout(250);
-  const pub = salvos.find((x) => x.nome === 'admin_publicar_ranking')?.corpo;
-  ok('admin ranking: publica a lista na ordem colada e a visibilidade', JSON.stringify(pub?.p) === JSON.stringify([{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { apelido: 'Ana', pontos: 50 }]) && pub.p_visivel === true, JSON.stringify(pub));
-  await foto(pagina, '11-admin-ranking');
-  await pagina.locator('.linha-rank input[type=text]').first().fill('');
-  const n = salvos.length;
-  await pagina.getByRole('button', { name: 'Publicar ranking' }).click(); await pagina.waitForTimeout(200);
-  ok('admin ranking: apelido vazio não é enviado', salvos.length === n && (await pagina.textContent('.aviso')).includes('linha 1'));
-  await pagina.context().close();
-}
 
 // ---- 12. Simplificação: o que ficou no Painel não aparece aqui ----
 {
   const { pagina, pedidos, erros } = await novaPagina({ admin: true });
   await pagina.goto(url('#/admin')); await pagina.waitForSelector('.painel-card');
   ok('admin: cartão do Painel explica o que fica lá e abre o login do Painel', (await pagina.textContent('.painel-card p')).includes('ficam no seu Painel') && (await pagina.getAttribute('.painel-card a', 'href')) === 'https://brunamedeiros.com/login' && (await pagina.getAttribute('.painel-card a', 'rel')) === 'noopener noreferrer');
-  ok('admin: só sobram dias e Ranking (sem Participantes nem Pontos)', (await pagina.locator('.ranking-link').count()) === 1 && (await pagina.textContent('.ranking-link')).includes('Ranking') && !(await pagina.textContent('main')).match(/Fichas e progresso|Lançar por dia/));
+  ok('admin: só sobram o cartão do Painel, o grupo e os dias (nada de Ranking, Participantes ou Pontos)', (await pagina.locator('.ranking-link').count()) === 0 && !(await pagina.textContent('main')).match(/Ranking|Fichas e progresso|Lançar por dia/));
   await pagina.goto(url('#/admin/participantes')); await pagina.waitForSelector('.titulo-admin');
   ok('admin: endereços antigos de participantes e pontos caem na lista do admin', (await pagina.textContent('.titulo-admin')) === 'Admin do desafio');
   ok('admin: sem erros no console', erros.length === 0, erros.join(' | '));
@@ -369,11 +352,11 @@ const RANK = [{ apelido: 'Lu', pontos: 40 }, { apelido: 'Bia', pontos: 40 }, { a
 }
 {
   const { pagina, pedidos } = await novaPagina({});
-  await pagina.goto(url()); await pagina.waitForSelector('.lista-dias');
+  await pagina.goto(url()); await pagina.waitForSelector('.menu-item', { state: 'attached' });
   ok('menina: não aparece cartão de cadastro nem link "Meu cadastro"', (await pagina.locator('.cartao-cadastro, a:has-text("Meu cadastro")').count()) === 0);
   ok('menina: o site não pede mais a ficha ao servidor (nada de dados extras)', !pedidos.some((p) => p.includes('minha_ficha')));
-  await pagina.goto(url('#/cadastro')); await pagina.waitForSelector('.lista-dias');
-  ok('menina: #/cadastro volta para a lista', true);
+  await pagina.goto(url('#/cadastro')); await pagina.waitForSelector('.etiqueta');
+  ok('menina: #/cadastro e #/ranking antigos caem na tela inicial', (await pagina.textContent('.etiqueta')) === 'Comece aqui');
   await pagina.context().close();
 }
 

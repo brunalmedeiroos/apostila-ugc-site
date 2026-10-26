@@ -1,10 +1,9 @@
 // Área só da Bruna. A proteção de verdade está no servidor (funções admin_* do Supabase):
 // mesmo que alguém abra esta tela, o banco recusa tudo que não for da admin.
 import { h } from './dom.js';
-import { diaMes, estaAberto, dataFortaleza, paraLiberaEm, novoIdChecklist, idYoutube, lerRanking, posicoesRanking, dataHoraFortaleza } from './regras.js';
+import { diaMes, estaAberto, dataFortaleza, paraLiberaEm, novoIdChecklist, idYoutube } from './regras.js';
 import { renderizarDocumento } from './documento.js';
 import { cabecaDoDia, corpoDoDia } from './dia-view.js';
-import { cartaoRanking } from './ranking-view.js';
 
 const PAINEL = 'https://brunamedeiros.com/login';
 
@@ -19,7 +18,6 @@ export async function abrirAdmin({ db, mostrar, avisar, rota }) {
   const { data: config } = await db.from('config').select('*').eq('id', 1).maybeSingle();
   if (e1) return mostrar(h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, e1.message)));
 
-  if (rota === '#/admin/ranking') return telaRanking({ db, mostrar, avisar });
   const m = rota.match(/^#\/admin\/dia\/(\d+)$/);
   if (m) {
     const dia = dias.find((d) => d.numero === Number(m[1]));
@@ -56,7 +54,6 @@ function telaLista({ db, mostrar, avisar, dias, config }) {
     h('section', { class: 'card secao' }, h('h2', {}, 'Grupo'),
       h('label', { class: 'campo', for: 'cfg-link' }, h('span', {}, 'Link do grupo'), link),
       h('label', { class: 'campo', for: 'cfg-insta' }, h('span', {}, '@ do Instagram'), insta), salvar),
-    h('a', { class: 'card ranking-link', href: '#/admin/ranking' }, h('span', { class: 'dia-titulo' }, 'Ranking'), h('span', { class: 'dia-lado' }, 'Editar e publicar')),
     h('nav', { class: 'card lista-dias', 'aria-label': 'Dias' }, linhas));
 }
 
@@ -186,75 +183,4 @@ function telaDia({ db, mostrar, avisar, dia, config }) {
       h('button', { class: 'btn-texto', type: 'button', onclick: () => { addCheck(); marca(); } }, '+ Adicionar item'),
       h('p', { class: 'nota' }, 'Itens já existentes mantêm o progresso das meninas mesmo se você mudar o texto.')),
     h('div', { class: 'acoes' }, botaoPrevia, botao), previaDia);
-}
-
-// ---------- ranking ----------
-async function telaRanking({ db, mostrar, avisar }) {
-  const { data, error } = await db.rpc('admin_ranking');
-  if (error) return mostrar(h('section', { class: 'card fechado' }, h('h1', {}, 'Algo deu errado'), h('p', {}, error.message)));
-
-  let linhas = (data.linhas ?? []).map((l) => ({ apelido: l.apelido, pontos: l.pontos }));
-  const area = h('textarea', { rows: 8, placeholder: 'Cole aqui o ranking, uma pessoa por linha:\nAna 40\nBia - 35\n1. Caro 30 pts' });
-  const avisos = h('div', { class: 'nota' });
-  const tabela = h('div', { class: 'linhas' });
-  const previa = h('div', { class: 'previa-dia' });
-  const visivel = h('input', { type: 'checkbox' });
-  visivel.checked = Boolean(data.visivel);
-  const posicoes = [];
-
-  const atualizar = () => {
-    posicoesRanking(linhas).forEach((p) => { if (posicoes[p.i]) posicoes[p.i].textContent = `${p.posicao}º`; });
-    previa.replaceChildren(cartaoRanking(linhas.filter((l) => l.apelido.trim() && Number.isInteger(l.pontos)), data.atualizado_em));
-  };
-  const desenhar = () => {
-    posicoes.length = 0;
-    tabela.replaceChildren(...linhas.map((l, i) => {
-      const pos = h('span', { class: 'rank-pos' });
-      posicoes[i] = pos;
-      const nome = h('input', { type: 'text', value: l.apelido, maxlength: 60, 'aria-label': 'Apelido', oninput: (e) => { l.apelido = e.target.value; atualizar(); } });
-      const pts = h('input', { type: 'number', value: l.pontos, 'aria-label': 'Pontos', oninput: (e) => { l.pontos = e.target.value === '' ? NaN : Number(e.target.value); atualizar(); } });
-      const x = h('button', { class: 'btn-texto', type: 'button' }, 'Remover');
-      x.addEventListener('click', () => { linhas.splice(i, 1); desenhar(); });
-      return h('div', { class: 'linha linha-rank' }, pos, nome, pts, x);
-    }));
-    atualizar();
-  };
-  desenhar();
-
-  const ler = h('button', { class: 'btn', type: 'button' }, 'Ler a lista colada');
-  ler.addEventListener('click', () => {
-    const r = lerRanking(area.value);
-    if (!r.linhas.length) { avisos.textContent = 'Não achei nenhuma linha com apelido e pontos. Use o formato: Ana 40'; return; }
-    if (linhas.length && !confirm(`Isto troca as ${linhas.length} linhas que estão na tela pelas ${r.linhas.length} coladas. Continuar?`)) return;
-    linhas = r.linhas;
-    avisos.replaceChildren(h('p', {}, `Li ${r.linhas.length} linhas.`),
-      ...(r.ignoradas.length ? [h('p', {}, `Não consegui ler ${r.ignoradas.length}:`), h('ul', {}, r.ignoradas.map((i) => h('li', {}, `"${i.linha}" (${i.motivo})`)))] : []));
-    desenhar();
-  });
-
-  const publicar = h('button', { class: 'btn btn-primario', type: 'button' }, 'Publicar ranking');
-  publicar.addEventListener('click', async () => {
-    const ruim = linhas.findIndex((l) => !l.apelido.trim() || l.apelido.trim().length > 60 || !Number.isInteger(l.pontos));
-    if (ruim >= 0) return avisar(`A linha ${ruim + 1} precisa de apelido (até 60 letras) e pontos inteiros.`, true);
-    publicar.disabled = true;
-    const { error: e } = await db.rpc('admin_publicar_ranking', { p: linhas.map((l) => ({ apelido: l.apelido.trim(), pontos: l.pontos })), p_visivel: visivel.checked });
-    publicar.disabled = false;
-    if (e) return avisar(`Não publicou: ${e.message}`, true);
-    avisar(visivel.checked ? 'Ranking publicado. As meninas já veem.' : 'Ranking salvo, mas escondido das meninas.');
-  });
-
-  mostrar(
-    h('a', { class: 'btn-texto voltar', href: '#/admin' }, '← Admin'),
-    h('h1', { class: 'titulo-admin' }, 'Ranking'),
-    h('section', { class: 'card secao' }, h('h2', {}, '1. Cole o ranking'),
-      h('p', { class: 'nota' }, 'Copie a lista do ranking do seu Painel e cole aqui. Pode ter posição na frente, "pts" no fim, ou colunas copiadas de uma tabela (uma pessoa por linha: Ana 40, Bia - 35, 1. Caro 30 pts).'),
-      area, ler, avisos),
-    h('section', { class: 'card secao' }, h('h2', {}, '2. Confira e corrija'), tabela,
-      h('button', { class: 'btn-texto', type: 'button', onclick: () => { linhas.push({ apelido: '', pontos: 0 }); desenhar(); } }, '+ Adicionar linha'),
-      h('p', { class: 'nota' }, 'Quem tem os mesmos pontos divide a posição. A ordem em que você colou desempata o que aparece primeiro.')),
-    h('section', { class: 'card secao' }, h('h2', {}, '3. Publicar'),
-      h('label', { class: 'check' }, visivel, h('span', {}, 'Mostrar o ranking para as meninas')),
-      h('p', { class: 'nota' }, data.atualizado_em ? `Última publicação: ${dataHoraFortaleza(data.atualizado_em)} (horário de Fortaleza).` : 'Ainda não foi publicado.'),
-      h('div', { class: 'acoes' }, publicar)),
-    h('h2', { class: 'titulo-admin' }, 'Como as meninas veem'), previa);
 }

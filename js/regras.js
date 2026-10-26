@@ -72,66 +72,35 @@ export const ehIdYoutube = (id) => ID_YOUTUBE.test(String(id ?? ''));
 
 export const urlEmbedYoutube = (id) => `https://www.youtube-nocookie.com/embed/${id}`;
 
-// ---- ranking colado pela Bruna ----
-const SEPARADORES = /^[\s\-–—:|·.,;]+|[\s\-–—:|·.,;]+$/g;
-
-function lerPontos(texto) {
-  const t = String(texto).trim().replace(/\s*(pts?|pontos?)\.?$/i, '').replace(/\s/g, '');
-  if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) return Number(t.replace(/\./g, ''));   // 1.250 = mil duzentos e cinquenta
-  if (/^-?\d{1,6}$/.test(t)) return Number(t);
-  return null;
-}
-
-// Aceita o que costuma sair de uma tabela copiada: "Ana 40", "Ana - 40", "Ana: 40 pts",
-// "1. Ana 40", "1º Ana 40" e colunas separadas por TAB ("1 [tab] Ana [tab] 40").
-// Devolve as linhas lidas e as que não deu para entender (para a Bruna corrigir).
-export function lerRanking(texto) {
-  const linhas = [];
-  const ignoradas = [];
-  for (const bruta of String(texto ?? '').replace(/\r\n?/g, '\n').split('\n')) {
-    const linha = bruta.trim();
-    if (!linha) continue;
-    let nome = null;
-    let pontos = null;
-
-    if (linha.includes('\t')) {
-      const cols = linha.split('\t').map((c) => c.trim()).filter(Boolean);
-      const iNome = cols.findIndex((c) => /\p{L}/u.test(c) && lerPontos(c) === null);
-      if (iNome >= 0) {
-        nome = cols[iNome];
-        const depois = cols.slice(iNome + 1).map(lerPontos).find((x) => x !== null);
-        pontos = depois ?? null;
-      }
-    } else {
-      const semPosicao = linha.replace(/^#?\d{1,3}\s*[.)º°ª]\s*/, '').replace(/^#\d{1,3}\s+/, '');
-      // um "-" colado no número é sinal de negativo; "Ana - 35" (com espaço) é só separador
-      const m = /^(.*?)(?:[\s–—:|]|-(?!\d))*(-?\d[\d.]*)\s*(?:pts?|pontos?)?\.?\s*$/i.exec(semPosicao);
-      if (m) { nome = m[1]; pontos = lerPontos(m[2]); }
-    }
-
-    nome = nome === null ? null : nome.replace(SEPARADORES, '').replace(/\s+/g, ' ').trim();
-    if (!nome || !/\p{L}/u.test(nome)) { if (/\p{L}/u.test(linha)) ignoradas.push({ linha, motivo: 'não achei o número de pontos' }); continue; }
-    if (pontos === null) { ignoradas.push({ linha, motivo: 'não achei o número de pontos' }); continue; }
-    if (nome.length > 60) { ignoradas.push({ linha, motivo: 'apelido com mais de 60 letras' }); continue; }
-    linhas.push({ apelido: nome, pontos });
+// ---- progresso e etapas (menu) ----
+// Itens obrigatórios do checklist dos dias que já abriram. É o que conta nos "X de Y marcados".
+export function progressoGeral(conteudos, marcados) {
+  let total = 0;
+  let feitos = 0;
+  let dias = 0;
+  for (const c of conteudos) {
+    if (!c || c.em_breve) continue;
+    const obrigatorios = (c.checklist ?? []).filter((i) => !i.opcional);
+    if (!obrigatorios.length) continue;
+    const certos = obrigatorios.filter((i) => marcados.has(`${c.numero}:${i.id}`)).length;
+    total += obrigatorios.length;
+    feitos += certos;
+    if (certos === obrigatorios.length) dias += 1;
   }
-  return { linhas, ignoradas };
+  return { total, feitos, dias, pct: total ? Math.round((feitos / total) * 100) : 0 };
 }
 
-// Mais pontos primeiro; quem empata na pontuação divide a posição (1, 2, 2, 4) e mantém a ordem colada.
-export function posicoesRanking(linhas) {
-  const ordenadas = linhas.map((l, i) => ({ ...l, i })).sort((a, b) => b.pontos - a.pontos || a.i - b.i);
-  const saida = [];
-  ordenadas.forEach((l, k) => {
-    const empate = k > 0 && l.pontos === ordenadas[k - 1].pontos;
-    saida.push({ apelido: l.apelido, pontos: l.pontos, i: l.i, posicao: empate ? saida[k - 1].posicao : k + 1, empate });
-  });
-  return saida;
+// Agrupa os dias nas etapas do menu. Dia que não está em nenhuma etapa vai para "Outros".
+export function agruparPorEtapa(agenda, etapas) {
+  const usados = new Set();
+  const grupos = (etapas ?? []).map((e) => {
+    const dias = e.dias.map((n) => agenda.find((d) => d.numero === n)).filter(Boolean);
+    dias.forEach((d) => usados.add(d.numero));
+    return { nome: e.nome, dias };
+  }).filter((g) => g.dias.length);
+  const sobras = agenda.filter((d) => !usados.has(d.numero));
+  if (sobras.length) grupos.push({ nome: 'Outros', dias: sobras });
+  return grupos;
 }
 
-// "26/10 às 14:30", sempre no horário de Fortaleza.
-const formatoHora = new Intl.DateTimeFormat('pt-BR', { timeZone: FUSO, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-export function dataHoraFortaleza(iso) {
-  const p = Object.fromEntries(formatoHora.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
-  return `${p.day}/${p.month} às ${p.hour}:${p.minute}`;
-}
+export const nomeDaEtapa = (n, etapas) => (etapas ?? []).find((e) => e.dias.includes(n))?.nome ?? '';
